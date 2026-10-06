@@ -90,6 +90,8 @@ p { margin: 0; }
 .page-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 24px; flex-wrap: wrap; }
 .page-head .sub { margin-top: 4px; }
 .head-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.head-title { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; min-width: 0; }
+.page-head .settings-btn { display: none; }
 
 /* Buttons */
 .btn { display: inline-flex; align-items: center; gap: 6px; border: 0; border-radius: var(--corner-md); padding: 9px 14px; font-weight: 500; cursor: pointer; white-space: nowrap; }
@@ -272,11 +274,12 @@ dialog::backdrop { background: rgba(20, 5, 77, 0.35); }
   .kpis .card .kpi-head { margin-bottom: 8px; }
   .card { padding: 18px; }
   .facts { grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
+  .head-title { width: 100%; }
+  .page-head .settings-btn { display: inline-flex; flex: none; min-height: 44px; margin: -8px -10px 0 0; }
   .head-actions { width: 100%; }
   .head-actions .btn-primary { flex: 1; justify-content: center; }
   .head-actions .seg { order: 3; width: 100%; }
   .seg button { flex: 1; padding: 7px 6px; }
-  .dup { display: none; }
   .two { grid-template-columns: 1fr; }
 }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
@@ -420,12 +423,7 @@ dialog.wide { width: min(640px, calc(100vw - 24px)); }
 .wg-break span { display: inline-flex; align-items: center; gap: 5px; }
 .wg-break i { width: 8px; height: 8px; border-radius: 2px; display: inline-block; }
 .wg-break b { color: var(--text-primary); font-weight: 600; }
-.cost-form { display: flex; gap: 12px; align-items: flex-end; flex-wrap: wrap; margin-bottom: 8px; }
-.cost-form input { border: 1px solid var(--border-primary); background: var(--surface-bg); border-radius: var(--corner-md); padding: 9px 12px; width: 100%; min-width: 0; }
-.cost-form .money input { padding-left: 26px; }
-#costErr { margin-bottom: 8px; }
 .insight { display: flex; align-items: flex-start; gap: 12px; padding: 14px; border-radius: var(--corner-md); background: var(--bg-faint); }
-.back { margin-bottom: 8px; margin-left: -10px; }
 .model-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 2fr); gap: 28px; }
 .slider label { font-weight: 500; }
 .slider input[type=range] { width: 100%; accent-color: var(--brand-primary); }
@@ -433,7 +431,6 @@ dialog.wide { width: min(640px, calc(100vw - 24px)); }
 .sl-num input { width: 96px; border: 1px solid var(--border-primary); background: var(--surface-bg); border-radius: 8px; padding: 5px 8px; text-align: right; }
 .proj-read { margin-bottom: 6px; } .proj-read #projVal { font-weight: 600; font-size: 16px; }
 @media (max-width: 900px) { .model-grid { grid-template-columns: 1fr; } }
-@media (max-width: 640px) { .cost-form .field { width: 100% !important; flex: 1 1 100% !important; } .cost-form .btn { width: 100%; justify-content: center; } }
 
 .card { box-shadow: 0 1px 3px rgba(43,31,40,0.06); }
 .tile .num { white-space: nowrap; }
@@ -466,7 +463,7 @@ pre.shared { white-space: pre-wrap; font-size: 12px; background: var(--bg-faint)
 .qr img { width: 180px; height: 180px; }
 code.secret { word-break: break-all; font-size: 12px; background: var(--bg-faint); padding: 2px 6px; border-radius: 6px; }
 /* Form fields need a visible edge, so empty boxes don't vanish */
-.field input, .field select, .add-row input, .filters input, .filters select, .cost-form input, .sl-num input, .chat-form textarea { border-color: var(--border-input); }
+.field input, .field select, .add-row input, .filters input, .filters select, .sl-num input, .chat-form textarea { border-color: var(--border-input); }
 /* The app icon (house and seedling) is the logo on the sign-in card and the sidebar */
 .rail img.mark, .auth-card img.mark { display: block; background: none; border-radius: 0; }
 /* "Removed · Undo" note after a one-tap removal */
@@ -488,13 +485,13 @@ code.secret { word-break: break-all; font-size: 12px; background: var(--bg-faint
 <div class="app">
   <nav class="rail" aria-label="Main">
     <img class="mark" src="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 512 512%22%3E %3Cdefs%3E %3ClinearGradient id=%22bg%22 x1=%220%22 y1=%220%22 x2=%221%22 y2=%221%22%3E %3Cstop offset=%220%22 stop-color=%22%23c0126f%22/%3E %3Cstop offset=%221%22 stop-color=%22%23d0306a%22/%3E %3C/linearGradient%3E %3C/defs%3E %3Crect width=%22512%22 height=%22512%22 rx=%22112%22 fill=%22url%28%23bg%29%22/%3E %3Cg fill=%22%23f7a8cd%22%3E %3Cpath d=%22M256 160 C246 118 206 96 158 104 C166 150 208 172 256 160 Z%22/%3E %3Cpath d=%22M256 160 C266 118 306 96 354 104 C346 150 304 172 256 160 Z%22/%3E %3C/g%3E %3Cpath d=%22M256 158 V196%22 stroke=%22%23f7a8cd%22 stroke-width=%2212%22 stroke-linecap=%22round%22 fill=%22none%22/%3E %3Cpath d=%22M130 278 L256 186 L382 278%22 stroke=%22%23f9bd45%22 stroke-width=%2230%22 stroke-linecap=%22round%22 stroke-linejoin=%22round%22 fill=%22none%22/%3E %3Cpath d=%22M256 222 L340 284 V388 H172 V284 Z%22 fill=%22%23f9bd45%22 stroke=%22%23f9bd45%22 stroke-width=%2218%22 stroke-linejoin=%22round%22/%3E %3C/svg%3E" alt="" width="36" height="36">
-    <button class="rail-btn" data-page="home" aria-label="Home"><svg class="ico"><use href="#i-home"/></svg></button>
-    <button class="rail-btn" data-page="transactions" aria-label="Spending"><svg class="ico"><use href="#i-list"/></svg></button>
-    <button class="rail-btn" data-page="family" aria-label="Family accounts"><svg class="ico"><use href="#i-users"/></svg></button>
-    <button class="rail-btn" data-page="strategy" aria-label="Financial strategy"><svg class="ico"><use href="#i-compass"/></svg></button>
-    <button class="rail-btn" data-page="wealth" aria-label="Wealth balance sheet"><svg class="ico"><use href="#i-chart"/></svg></button>
+    <button class="rail-btn" data-page="home" aria-label="Home" title="Home"><svg class="ico"><use href="#i-home"/></svg></button>
+    <button class="rail-btn" data-page="transactions" aria-label="Spending" title="Spending"><svg class="ico"><use href="#i-list"/></svg></button>
+    <button class="rail-btn" data-page="family" aria-label="Family accounts" title="Family"><svg class="ico"><use href="#i-users"/></svg></button>
+    <button class="rail-btn" data-page="strategy" aria-label="Financial strategy" title="Strategy"><svg class="ico"><use href="#i-compass"/></svg></button>
+    <button class="rail-btn" data-page="wealth" aria-label="Wealth balance sheet" title="Wealth"><svg class="ico"><use href="#i-chart"/></svg></button>
     <div class="spacer"></div>
-    <button class="rail-btn" data-action="settings" aria-label="Household settings"><svg class="ico"><use href="#i-sliders"/></svg></button>
+    <button class="rail-btn" data-action="settings" aria-label="Settings" title="Settings"><svg class="ico"><use href="#i-cog"/></svg></button>
     <div class="avatar" id="meAvatar" aria-hidden="true"></div>
   </nav>
 
@@ -627,7 +624,7 @@ code.secret { word-break: break-all; font-size: 12px; background: var(--bg-faint
     <symbol id="i-down" viewBox="0 0 24 24"><path d="m22 17-8.5-8.5-5 5L2 7"/><path d="M16 17h6v-6"/></symbol>
     <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14"/><path d="M5 12h14"/></symbol>
     <symbol id="i-x" viewBox="0 0 24 24"><path d="M18 6 6 18"/><path d="M6 6l12 12"/></symbol>
-    <symbol id="i-sliders" viewBox="0 0 24 24"><path d="M4 21v-7"/><path d="M4 10V3"/><path d="M12 21v-9"/><path d="M12 8V3"/><path d="M20 21v-5"/><path d="M20 12V3"/><path d="M1 14h6"/><path d="M9 8h6"/><path d="M17 16h6"/></symbol>
+    <symbol id="i-cog" viewBox="0 0 24 24"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></symbol>
       <symbol id="i-cart" viewBox="0 0 24 24"><circle cx="8" cy="21" r="1"/><circle cx="19" cy="21" r="1"/><path d="M2 2h3l2.7 12.4a2 2 0 0 0 2 1.6h8.7a2 2 0 0 0 2-1.6L22 6H6"/></symbol>
     <symbol id="i-cup" viewBox="0 0 24 24"><path d="M17 8h1a4 4 0 1 1 0 8h-1"/><path d="M3 8h14v9a4 4 0 0 1-4 4H7a4 4 0 0 1-4-4Z"/><path d="M6 2v2M10 2v2M14 2v2"/></symbol>
     <symbol id="i-car" viewBox="0 0 24 24"><path d="M5 17H3v-5l2-5h14l2 5v5h-2"/><circle cx="7" cy="17" r="2"/><circle cx="17" cy="17" r="2"/><path d="M9 17h6"/></symbol>
@@ -654,7 +651,6 @@ code.secret { word-break: break-all; font-size: 12px; background: var(--bg-faint
     <symbol id="i-compass" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="m16.2 7.8-2.1 6.3-6.3 2.1 2.1-6.3z"/></symbol>
     <symbol id="i-alert" viewBox="0 0 24 24"><path d="m21.7 18-8-14a2 2 0 0 0-3.4 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.7-3Z"/><path d="M12 9v4M12 17h.01"/></symbol>
     <symbol id="i-checkcircle" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></symbol>
-    <symbol id="i-arrowleft" viewBox="0 0 24 24"><path d="m12 19-7-7 7-7"/><path d="M19 12H5"/></symbol>
   </defs>
 </svg>
 <script>
@@ -869,9 +865,11 @@ code.secret { word-break: break-all; font-size: 12px; background: var(--bg-faint
 
   // ══ Chrome ═════════════════════════════════════════════════════════════
   var root = el("root");
+  // On phones, Settings sits beside the title, away from the page's own buttons (the side rail has it on wider screens)
   function pageHead(title, sub, actions) {
-    return '<div class="page-head"><div><h1>' + title + '</h1>' + (sub ? '<p class="sub muted">' + sub + "</p>" : "") + '</div><div class="head-actions">' + (actions || "") +
-      '<button class="icon-btn mobile-only" data-action="settings" aria-label="Household settings">' + icon("sliders") + "</button></div></div>";
+    return '<div class="page-head"><div class="head-title"><div><h1>' + title + '</h1>' + (sub ? '<p class="sub muted">' + sub + "</p>" : "") + "</div>" +
+      '<button type="button" class="btn btn-subtle settings-btn" data-action="settings">' + icon("cog") + "Settings</button></div>" +
+      (actions ? '<div class="head-actions">' + actions + "</div>" : "") + "</div>";
   }
   function renderChrome() {
     document.querySelectorAll("[data-page]").forEach(function (b) { if (b.getAttribute("data-page") === S.page) b.setAttribute("aria-current", "page"); else b.removeAttribute("aria-current"); });
@@ -940,7 +938,7 @@ code.secret { word-break: break-all; font-size: 12px; background: var(--bg-faint
     var soFar = m === monthKey(), day = new Date().getDate(), pm = addMonths(m, -1), prevAll = inMonth(txs, pm);
     var st = stats(inMonth(txs, m)), prev = stats(soFar ? prevAll.filter(function (t) { return +t.d.slice(8, 10) <= day; }) : prevAll);
     var change = prevAll.length ? st.net - prev.net : null;
-    var hero = '<div class="hero"><div class="row-between mb-md"><button type="button" class="hero-title" data-page="strategy">Net cashflow' + (soFar ? " so far" : "") + ", " + esc(monthLabel(m, "long")) + " " + icon("chev") + "</button>" +
+    var hero = '<div class="hero"><div class="row-between mb-md"><button type="button" class="hero-title" data-go-tx="" title="See this month\'s payments">Net cashflow' + (soFar ? " so far" : "") + ", " + esc(monthLabel(m, "long")) + " " + icon("chev") + "</button>" +
       (change != null ? '<span class="badge" title="' + (soFar ? "Compared with the first " + day + " days of " + esc(monthName(pm)) : "Compared with " + esc(monthName(pm))) + '">' + (change >= 0 ? "↑ " : "↓ ") + gbp(change) + (soFar ? " vs this time in " : " vs ") + esc(monthLabel(pm)) + "</span>" : "") + "</div>" +
       '<p class="big num">' + signed(st.net) + '</p><p class="sm mt-xs">Money in ' + gbp(st.inc) + ", money out " + gbp(st.out) + "</p>" + heroSpark(txs, m) + healthBlock(m, txs) + "</div>";
     html += '<div class="grid g3" style="margin-bottom:24px">' + hero + cashflowCard(txs, m) + wealthGrowthCard() + "</div>";
@@ -1121,35 +1119,36 @@ code.secret { word-break: break-all; font-size: 12px; background: var(--bg-faint
     var cur = monthKey(), costs = vals(S.costs).sort(function (a, b) { var x = a.when || "9999-99", y = b.when || "9999-99"; return x < y ? -1 : x > y ? 1 : ((a.createdAt || "") < (b.createdAt || "") ? -1 : 1); });
     var total = costs.reduce(function (s, c) { return s + (c.amount || 0); }, 0);
     var soon = costs.filter(function (c) { return c.when && c.when <= addMonths(cur, 2); }).reduce(function (s, c) { return s + (c.amount || 0); }, 0);
-    var form = S.canWrite ? '<form class="cost-form" data-cost-form><div class="field" style="flex:1 1 200px"><label for="costLabel">What\'s the cost?</label><input id="costLabel" placeholder="e.g. New washing machine" autocomplete="off"></div>' +
-      '<div class="field" style="width:130px"><label for="costAmount">Estimate</label><div class="money"><input id="costAmount" inputmode="decimal" autocomplete="off" placeholder="0"></div></div>' +
-      '<div class="field" style="width:170px"><label for="costWhen">When</label><input id="costWhen" type="month" min="' + cur + '"></div>' +
-      '<button class="btn btn-primary" type="submit">' + icon("plus") + 'Add</button></form><p class="err" id="costErr" hidden></p>' : "";
     var list = costs.length ? '<div class="rows mb-lg">' + costs.map(function (c) {
       var badge = !c.when ? '<span class="badge default">Date to be confirmed</span>' : c.when < cur ? '<span class="badge warning">Was due ' + esc(monthLabel(c.when)) + "</span>" : '<span class="badge brand">' + esc(monthLabel(c.when, c.when.slice(0, 4) === cur.slice(0, 4) ? "" : "year")) + "</span>";
       return '<div class="tx-row" style="cursor:default"><div class="main" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">' + (S.canWrite ? '<button type="button" class="cost-name" data-cost-edit="' + esc(c.id) + '" aria-label="Edit ' + esc(c.label) + '">' + esc(c.label) + "</button>" : "<span>" + esc(c.label) + "</span>") + badge + '</div><span class="amt">' + gbp(c.amount) + "</span>" +
         (S.canWrite ? '<button class="icon-btn" data-cost-todo="' + esc(c.id) + '" aria-label="Add to to-do">' + icon("listplus") + '</button><button class="icon-btn" data-cost-del="' + esc(c.id) + '" aria-label="Remove ' + esc(c.label) + '">' + icon("x") + "</button>" : "") + "</div>";
-    }).join("") + "</div>" : '<p class="muted mb-lg">Nothing planned yet. Add car services, birthdays, school trips, a new boiler: anything you can see coming.</p>';
-    return '<div class="card"><div class="sec-head" style="align-items:flex-start"><div><h2>Upcoming costs and purchases</h2><p class="sm muted mt-xs">Plan ahead: add costs to forecast what\'s coming</p></div>' + (costs.length ? '<span class="badge brand">' + costs.length + " planned</span>" : "") + "</div>" + form + list +
+    }).join("") + "</div>" : '<p class="muted mb-lg">Nothing planned yet. Add car services, birthdays, school trips, a new boiler: anything you can see coming.</p>' +
+      (S.canWrite ? '<button class="btn btn-neutral mb-lg" data-action="cost">' + icon("plus") + "Add a cost</button>" : "");
+    return '<div class="card"><div class="sec-head" style="align-items:flex-start"><div><h2>Upcoming costs and purchases</h2><p class="sm muted mt-xs">Plan ahead: add costs to forecast what\'s coming</p></div>' +
+      '<div class="row-between" style="gap:8px">' + (costs.length ? '<span class="badge brand">' + costs.length + " planned</span>" : "") + (S.canWrite ? '<button class="icon-btn" data-action="cost" aria-label="Add a cost">' + icon("plus") + "</button>" : "") + "</div></div>" + list +
       '<div class="tile row-between"><div class="row-between" style="gap:10px;justify-content:flex-start"><span class="brand">' + icon("up") + '</span><div><p class="muted">Estimated upcoming spend</p>' + (soon && soon !== total ? '<p class="sm faint">' + gbp(soon) + " of it in the next three months</p>" : "") + '</div></div><span class="big">' + gbp(total) + "</span></div></div>";
   }
 
+  // Add a cost (no id) or edit one
   function openCost(id) {
-    var c = S.costs[id]; if (!c) return;
+    var c = id ? S.costs[id] : null; if (id && !c) return;
     openForm({
-      title: "Edit " + c.label,
+      title: c ? "Edit " + c.label : "Add a cost",
       fields: [
-        { name: "label", label: "What's the cost?", value: c.label },
-        { name: "amount", label: "Estimate", type: "money", value: c.amount },
-        { name: "when", label: "When", type: "month", value: c.when || "", hint: "Leave blank if the date isn't known yet." }
+        { name: "label", label: "What's the cost?", value: c ? c.label : "", placeholder: "e.g. New washing machine" },
+        { name: "amount", label: "Estimate", type: "money", value: c ? c.amount : "" },
+        { name: "when", label: "When", type: "month", value: c ? c.when || "" : "", hint: "Leave blank if the date isn't known yet." }
       ],
+      saveLabel: c ? undefined : "Add",
       onSave: function () {
         var lbl = gv("label").trim(), amt = parseMoney(gv("amount")), when = gv("when");
         if (!lbl) { gErr("label", "Say what the cost is."); return false; }
         if (amt == null || isNaN(amt) || amt <= 0) { gErr("amount", "Add an estimate, like 250."); return false; }
-        saveDoc("costs", id, Object.assign({}, c, { label: lbl.slice(0, 120), amount: amt, when: /^\d{4}-\d{2}$/.test(when) ? when : null }));
+        var body = { label: lbl.slice(0, 120), amount: amt, when: /^\d{4}-\d{2}$/.test(when) ? when : null };
+        saveDoc("costs", c ? id : newId("c"), Object.assign(c ? Object.assign({}, c) : { createdAt: new Date().toISOString() }, body));
       },
-      onDelete: function () { delDoc("costs", id); toast("Removed “" + c.label + "”", function () { saveDoc("costs", id, c); }); },
+      onDelete: c ? function () { delDoc("costs", id); toast("Removed “" + c.label + "”", function () { saveDoc("costs", id, c); }); } : null,
       confirmLabel: "Delete for both of you"
     });
   }
@@ -1288,7 +1287,7 @@ code.secret { word-break: break-all; font-size: 12px; background: var(--bg-faint
     var txs = allTx(), m = currentMonth(), hl = health(m, txs), ok = hl.checks.length >= 2;
     initModel();
     var badge = ok ? '<span class="badge ' + (hl.score >= 60 ? "success" : hl.score >= 40 ? "warning" : "danger") + '">' + esc(healthLabel(hl.score)) + ", " + hl.score + "/100</span>" : "";
-    var html = '<button class="btn btn-subtle back" data-page="home">' + icon("arrowleft") + "Back to dashboard</button>" + pageHead("Financial strategy", "Insights and forward modelling for " + esc(S.household.household), badge);
+    var html = pageHead("Financial strategy", "Insights and forward modelling for " + esc(S.household.household), badge);
     var good = hl.checks.filter(function (c) { return c.score >= 75 && c.good; }), bad = hl.checks.filter(function (c) { return c.score < 75 && c.step; }).sort(function (a, b) { return a.score - b.score; });
     if (ok) {
       html += '<div class="grid g2" style="margin-bottom:24px"><div class="card"><div class="sec-head"><h2>What\'s going well</h2><span class="badge success">' + good.length + (good.length === 1 ? " win" : " wins") + '</span></div><div class="stack" style="gap:12px">' +
@@ -1753,9 +1752,8 @@ code.secret { word-break: break-all; font-size: 12px; background: var(--bg-faint
       var v = sumV(t.a.filter(function (i) { return GROUPS[i.group].cat === c.key; })), pct = t.assets ? Math.round(v / t.assets * 100) : 0;
       return '<div><div class="row-between mb-xs"><span>' + c.label + '</span><span><span class="sm muted num">' + gbp(v) + '</span>&nbsp;&nbsp;<span class="sm brand num" style="font-weight:600">' + pct + "%</span></span></div>" + '<div class="bar"><span style="width:' + pct + '%;background:var(' + c.c + ')"></span></div>' + "</div>";
     }).join("");
-    var html = '<div class="stack">' + wMonthly() + '<div class="card"><h2 class="mb-lg">Net worth breakdown</h2><div class="grid g3 mb-lg dup" style="gap:16px">' +
-      '<div class="tile"><p class="sm muted">Total assets</p><p class="big mt-xs" style="font-size:22px">' + gbp(t.assets) + '</p></div><div class="tile"><p class="sm muted">Total liabilities</p><p class="big mt-xs" style="font-size:22px">' + gbp(t.liabs) + "</p></div>" +
-      '<div class="tile selected"><p class="sm muted">Net worth</p><p class="big brand mt-xs" style="font-size:22px">' + (t.net < 0 ? "−" : "") + gbp(t.net) + '</p></div></div><h3 class="mb-lg">Where your assets are</h3><div class="stack" style="gap:16px">' + catRows + "</div></div>";
+    // The three totals are already at the top of the page, so this card only shows the split
+    var html = '<div class="stack">' + wMonthly() + '<div class="card"><h2 class="mb-lg">Where your assets are</h2><div class="stack" style="gap:16px">' + catRows + "</div></div>";
     var prop = sumV(byGroup(items, "property")), mort = sumV(byGroup(items, "mortgage")), ratios = "";
     if (prop > 0 && mort > 0) { var ltv = Math.round(mort / prop * 100); ratios += '<div class="tile"><div class="row-between mb-md"><h3>Loan-to-value</h3><span class="badge ' + (ltv > 75 ? "warning" : "success") + '">' + ltv + '%</span></div><p class="sm muted">Mortgage ' + gbp(mort) + " against property worth " + gbp(prop) + '</p><div class="mt-md">' + bar(ltv, ltv > 75 ? "warn" : "ok") + "</div></div>"; }
     if (t.assets > 0) { var dta = Math.round(t.liabs / t.assets * 100); ratios += '<div class="tile"><div class="row-between mb-md"><h3>Debt-to-assets</h3><span class="badge ' + (dta > 50 ? "warning" : "success") + '">' + dta + '%</span></div><p class="sm muted">Everything owed (' + gbp(t.liabs) + ') as a share of everything owned</p><div class="mt-md">' + bar(dta, dta > 50 ? "warn" : "ok") + "</div></div>"; }
@@ -1932,7 +1930,9 @@ code.secret { word-break: break-all; font-size: 12px; background: var(--bg-faint
   function wAssets(items) {
     var inv = items.filter(function (i) { return GROUPS[i.group] && (GROUPS[i.group].cat === "investments" || GROUPS[i.group].cat === "pensions"); }).sort(function (a, b) { return b.value - a.value; });
     var invCard = '<div class="card"><div class="sec-head"><div class="sec-title"><div class="icon-tile">' + icon("chart") + '</div><h2>Investments &amp; pensions</h2></div><span class="num" style="font-weight:600">' + gbp(sumV(inv)) + "</span></div>" +
-      (inv.length ? '<div class="rows">' + inv.map(assetRow).join("") + "</div>" : '<div class="empty"><span>Add ISAs, pensions and investments in the Investments tab.</span><button class="btn btn-subtle" data-wtab="investments">Go to Investments</button></div>') + "</div>";
+      // Listed once, on the Investments tab, so they aren't repeated here
+      (inv.length ? '<div class="row-between" style="gap:12px;flex-wrap:wrap"><p class="sm muted">Your ISAs, pensions and other investments are listed on the Investments tab.</p><button class="btn btn-subtle" data-wtab="investments">Go to Investments ' + icon("chev") + "</button></div>"
+        : '<div class="empty"><span>Add ISAs, pensions and investments in the Investments tab.</span><button class="btn btn-subtle" data-wtab="investments">Go to Investments</button></div>') + "</div>";
     return '<div class="stack">' + wSection(items, "property") + invCard + wSection(items, "cash") + wSection(items, "other") + "</div>";
   }
 
@@ -2834,6 +2834,7 @@ code.secret { word-break: break-all; font-size: 12px; background: var(--bg-faint
       if (a === "budgets") return openBudgets();
       if (a === "addtx") return openAddTx();
       if (a === "goal") return openGoal(null);
+      if (a === "cost") return openCost(null);
       if (a === "witem") return openItem(null, t.getAttribute("data-group"));
       if (a === "upd-start") return startUpdate();
       if (a === "todo-tags") return openTags();
@@ -2857,7 +2858,12 @@ code.secret { word-break: break-all; font-size: 12px; background: var(--bg-faint
     }
     if ((a = t.getAttribute("data-goal")) !== null) return S.canWrite && openGoal(a);
     if ((a = t.getAttribute("data-witem")) !== null) return S.canWrite && openItem(a);
-    if ((a = t.getAttribute("data-wtab")) !== null) { S.wealthTab = a; return render(); }
+    if ((a = t.getAttribute("data-wtab")) !== null) {
+      S.wealthTab = a; render();
+      // A link further down the page (not the tab bar itself) jumps up to the tabs
+      if (!t.closest('[role="tablist"]')) { var tb = root.querySelector('.tabs [data-wtab]'); if (tb) tb.parentNode.scrollIntoView({ block: "start" }); }
+      return;
+    }
     if ((a = t.getAttribute("data-wfilter")) !== null) { S.wealthFilter = a; return render(); }
     if ((a = t.getAttribute("data-wbx")) !== null) { S.wbOpen = S.wbOpen || {}; S.wbOpen[a] = !S.wbOpen[a]; return render(); }
     if ((a = t.getAttribute("data-wbrange")) !== null) { S.wbRange = +a === 12 ? 12 : 6; return render(); }
@@ -2922,14 +2928,6 @@ code.secret { word-break: break-all; font-size: 12px; background: var(--bg-faint
     }
   });
   document.addEventListener("submit", function (e) {
-    if (e.target.hasAttribute("data-cost-form")) {
-      e.preventDefault(); if (!S.canWrite) return;
-      var lbl = el("costLabel").value.trim(), amt = parseMoney(el("costAmount").value), when = el("costWhen").value, er = el("costErr");
-      if (!lbl) { er.textContent = "Say what the cost is."; er.hidden = false; el("costLabel").focus(); return; }
-      if (amt == null || isNaN(amt) || amt <= 0) { er.textContent = "Add an estimate, like 250."; er.hidden = false; el("costAmount").focus(); return; }
-      saveDoc("costs", newId("c"), { label: lbl.slice(0, 120), amount: amt, when: /^\d{4}-\d{2}$/.test(when) ? when : null, createdAt: new Date().toISOString() });
-      render(); var n2 = el("costLabel"); if (n2) n2.focus(); return;
-    }
     if (!e.target.hasAttribute("data-todo-form")) return; e.preventDefault();
     var inp = el("todoInput"), label = inp.value.trim(); if (!label || !S.canWrite) return;
     var tg = tagById(S.todoAddTag || S.todoTag);
