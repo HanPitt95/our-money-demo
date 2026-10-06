@@ -300,6 +300,7 @@ dialog::backdrop { background: rgba(20, 5, 77, 0.35); }
 .hero .big { font-size: 34px; }
 .hero .badge { background: rgba(255,255,255,0.12); color: #fff; }
 .ring-wrap { display: flex; align-items: center; gap: 16px; margin-top: 20px; padding-top: 20px; border-top: 1px solid rgba(255,255,255,0.2); }
+.hero.solo > .ring-wrap:first-child { margin-top: 0; padding-top: 0; border-top: 0; } /* Plan's health card has nothing above it */
 .ring { width: 96px; height: 96px; position: relative; flex-shrink: 0; }
 .ring svg { width: 100%; height: 100%; transform: rotate(-90deg); }
 .ring .lbl { position: absolute; inset: 0; display: grid; place-items: center; font-weight: 600; font-size: 20px; }
@@ -496,7 +497,7 @@ code.secret { word-break: break-all; font-size: 12px; background: var(--bg-faint
     <img class="mark" src="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 512 512%22%3E %3Cdefs%3E %3ClinearGradient id=%22bg%22 x1=%220%22 y1=%220%22 x2=%221%22 y2=%221%22%3E %3Cstop offset=%220%22 stop-color=%22%23c0126f%22/%3E %3Cstop offset=%221%22 stop-color=%22%23d0306a%22/%3E %3C/linearGradient%3E %3C/defs%3E %3Crect width=%22512%22 height=%22512%22 rx=%22112%22 fill=%22url%28%23bg%29%22/%3E %3Cg fill=%22%23f7a8cd%22%3E %3Cpath d=%22M256 160 C246 118 206 96 158 104 C166 150 208 172 256 160 Z%22/%3E %3Cpath d=%22M256 160 C266 118 306 96 354 104 C346 150 304 172 256 160 Z%22/%3E %3C/g%3E %3Cpath d=%22M256 158 V196%22 stroke=%22%23f7a8cd%22 stroke-width=%2212%22 stroke-linecap=%22round%22 fill=%22none%22/%3E %3Cpath d=%22M130 278 L256 186 L382 278%22 stroke=%22%23f9bd45%22 stroke-width=%2230%22 stroke-linecap=%22round%22 stroke-linejoin=%22round%22 fill=%22none%22/%3E %3Cpath d=%22M256 222 L340 284 V388 H172 V284 Z%22 fill=%22%23f9bd45%22 stroke=%22%23f9bd45%22 stroke-width=%2218%22 stroke-linejoin=%22round%22/%3E %3C/svg%3E" alt="" width="36" height="36">
     <button class="rail-btn" data-page="home" aria-label="Home" title="Home"><svg class="ico"><use href="#i-home"/></svg></button>
     <button class="rail-btn" data-page="transactions" aria-label="Spending" title="Spending"><svg class="ico"><use href="#i-list"/></svg></button>
-    <button class="rail-btn" data-page="strategy" aria-label="Financial strategy" title="Strategy"><svg class="ico"><use href="#i-compass"/></svg></button>
+    <button class="rail-btn" data-page="plan" aria-label="Plan" title="Plan"><svg class="ico"><use href="#i-compass"/></svg></button>
     <button class="rail-btn" data-page="wealth" aria-label="Wealth balance sheet" title="Wealth"><svg class="ico"><use href="#i-chart"/></svg></button>
     <div class="spacer"></div>
     <button class="rail-btn" data-action="settings" aria-label="Settings" title="Settings"><svg class="ico"><use href="#i-cog"/></svg></button>
@@ -512,7 +513,7 @@ code.secret { word-break: break-all; font-size: 12px; background: var(--bg-faint
   <nav class="bnav" aria-label="Main">
     <button data-page="home"><svg class="ico"><use href="#i-home"/></svg>Home</button>
     <button data-page="transactions"><svg class="ico"><use href="#i-list"/></svg>Spending</button>
-    <button data-page="strategy"><svg class="ico"><use href="#i-compass"/></svg>Strategy</button>
+    <button data-page="plan"><svg class="ico"><use href="#i-compass"/></svg>Plan</button>
     <button data-page="wealth"><svg class="ico"><use href="#i-chart"/></svg>Wealth</button>
   </nav>
 </div>
@@ -734,7 +735,7 @@ code.secret { word-break: break-all; font-size: 12px; background: var(--bg-faint
     household: { household: "Our household", p1: "Person 1", p2: "Person 2" },
     history: { points: {} }, rules: {}, billsIgnore: [],
     loaded: false, mode: "connecting", canWrite: true,
-    wealthTab: "overview", who: "all", spTab: "overview", txFilters: false, upd: null, tags: null, todoTag: "", todoAddTag: "", todoDraft: "",
+    wealthTab: "overview", who: "all", spTab: "overview", txFilters: false, planTab: "todos", upd: null, tags: null, todoTag: "", todoAddTag: "", todoDraft: "",
     txq: { q: "", month: null, cat: "all", acc: "all" }
   };
   var STORE = { items: "items", accounts: "accounts", tx: "txdocs", pots: "pots", goals: "goals", todos: "todos", costs: "costs" };
@@ -891,7 +892,8 @@ code.secret { word-break: break-all; font-size: 12px; background: var(--bg-faint
     renderChrome();
     if (!S.loaded) return;
     if (S.page === "family") S.page = "transactions"; // Family now lives in Spending
-    var fn = { home: pageHome, transactions: pageTx, strategy: pageStrategy, wealth: pageWealth }[S.page] || pageHome;
+    if (S.page === "strategy") S.page = "plan"; // and Strategy became Plan
+    var fn = { home: pageHome, transactions: pageTx, plan: pagePlan, wealth: pageWealth }[S.page] || pageHome;
     var y = window.scrollY;
     root.innerHTML = fn();
     window.scrollTo(0, y);
@@ -917,6 +919,9 @@ code.secret { word-break: break-all; font-size: 12px; background: var(--bg-faint
       saveMeta("health", { score: sc, at: new Date().toISOString() });
     }, 4000);
   }
+  // Where a tapped notification opens (sw.js sends one of these names, picked from its own fixed list)
+  var OPEN_TO = { plan: ["plan", "todos"], "plan-health": ["plan", "health"], wealth: ["wealth", null] };
+  function openFrom(where) { var o = Object.prototype.hasOwnProperty.call(OPEN_TO, where) ? OPEN_TO[where] : null; if (!o) return false; S.page = o[0]; if (o[1]) S.planTab = o[1]; return true; }
   function go(page) { S.page = page; render(); window.scrollTo(0, 0); var h = root.querySelector("h1"); if (h) { h.setAttribute("tabindex", "-1"); h.focus({ preventScroll: true }); } }
 
   // ══ Shared row renderers ════════════════════════════════════════════════
@@ -941,7 +946,7 @@ code.secret { word-break: break-all; font-size: 12px; background: var(--bg-faint
       (txs.length ? monthSelect(m) : "") + (S.canWrite ? '<button class="btn btn-neutral" data-action="addtx">' + icon("plus") + 'Add transaction</button><button class="btn btn-primary" data-action="import">' + icon("upload") + "Import</button>" : ""));
     var html = head;
     if (!txs.length) {
-      return html + '<div class="stack">' + emptyImport() + '<div class="grid g2">' + wealthGrowthCard() + goalsCard() + "</div>" + todosCard() + costsCard() + "</div>";
+      return html + '<div class="stack">' + emptyImport() + wealthGrowthCard() + "</div>";
     }
     // A month still in progress is compared with the same point last month, not the whole of it
     var soFar = m === monthKey(), day = new Date().getDate(), pm = addMonths(m, -1), prevAll = inMonth(txs, pm);
@@ -951,9 +956,7 @@ code.secret { word-break: break-all; font-size: 12px; background: var(--bg-faint
       (change != null ? '<span class="badge" title="' + (soFar ? "Compared with the first " + day + " days of " + esc(monthName(pm)) : "Compared with " + esc(monthName(pm))) + '">' + (change >= 0 ? "↑ " : "↓ ") + gbp(change) + (soFar ? " vs this time in " : " vs ") + esc(monthLabel(pm)) + "</span>" : "") + "</div>" +
       '<p class="big num">' + signed(st.net) + '</p><p class="sm mt-xs">Money in ' + gbp(st.inc) + ", money out " + gbp(st.out) + "</p>" + heroSpark(txs, m) + healthBlock(m, txs) + "</div>";
     html += '<div class="grid g3" style="margin-bottom:24px">' + hero + cashflowCard(txs, m) + wealthGrowthCard() + "</div>";
-    html += '<div class="grid g3" style="margin-bottom:24px"><div class="span2">' + budgetCard(txs, m) + "</div>" + goalsCard() + "</div>";
-    html += '<div style="margin-bottom:24px">' + todosCard() + "</div>";
-    html += '<div style="margin-bottom:24px">' + costsCard() + "</div>";
+    html += '<div style="margin-bottom:24px">' + budgetCard(txs, m) + "</div>";
     var recent = inMonth(txs, m).slice(0, 7);
     html += '<div class="grid g2"><div class="card"><div class="sec-head"><h2>Recent transactions</h2><button class="btn btn-subtle" data-go-tx="">All ' + icon("chev") + "</button></div>" +
       (recent.length ? '<div class="rows">' + recent.map(function (t) { return txRow(t, true); }).join("") + "</div>" : '<p class="muted">Nothing in ' + esc(monthLabel(m, "long")) + " yet.</p>") + "</div>" + billsCard() + "</div>";
@@ -1292,21 +1295,32 @@ code.secret { word-break: break-all; font-size: 12px; background: var(--bg-faint
     return '<div class="insight"><div class="icon-tile" style="color:' + (good ? "var(--success-text)" : "var(--warning-text)") + '">' + icon(good ? "checkcircle" : "alert") + '</div><div style="flex:1;min-width:0"><p style="font-weight:600">' + esc(title) + '</p><p class="sm muted mt-xs">' + esc(detail) + "</p></div>" +
       (key && S.canWrite ? (function () { var c = health(currentMonth(), allTx()).checks.filter(function (x) { return x.key === key; })[0], added = c && c.step && stepAdded(c.step.title); return '<button class="icon-btn" data-step-todo="' + key + '" aria-label="' + (added ? "Added to to-do" : "Add to to-do") + '"' + (added ? " disabled" : "") + ">" + icon(added ? "check" : "listplus") + "</button>"; })() : "") + "</div>";
   }
-  function pageStrategy() {
+  // ══ Page: Plan ═════════════════════════════════════════════════════════
+  // What you're working towards: to-dos, goals and upcoming costs; the health score with what's going
+  // well, what to improve and Ask Claude; and modelling. It was "Strategy", plus the planning cards from Home.
+  function pagePlan() {
+    var tab = S.planTab, html = pageHead("Plan", "What you're working towards") +
+      '<div class="tabs sp-tabs" role="tablist">' + [["todos", "To-dos &amp; goals"], ["health", "Health"], ["model", "Modelling"]].map(function (x) {
+        return '<button type="button" role="tab" data-ptab="' + x[0] + '" aria-selected="' + (tab === x[0]) + '">' + x[1] + "</button>";
+      }).join("") + "</div>";
+    if (tab === "health") return html + planHealth();
+    if (tab === "model") return html + planModel();
+    return html + '<div class="stack">' + todosCard() + '<div class="grid g2">' + goalsCard() + costsCard() + "</div></div>";
+  }
+  function planHealth() {
     var txs = allTx(), m = currentMonth(), hl = health(m, txs), ok = hl.checks.length >= 2;
-    initModel();
-    var badge = ok ? '<span class="badge ' + (hl.score >= 60 ? "success" : hl.score >= 40 ? "warning" : "danger") + '">' + esc(healthLabel(hl.score)) + ", " + hl.score + "/100</span>" : "";
-    var html = pageHead("Financial strategy", "Insights and forward modelling for " + esc(S.household.household), badge);
+    if (!ok) return '<div class="card" style="margin-bottom:24px"><h2 class="mb-md">Your financial health</h2><p class="muted">Import a few months of statements and fill in the Wealth page, and a health score appears here, with what\'s going well and what to improve.</p></div>' + chatCard();
     var good = hl.checks.filter(function (c) { return c.score >= 75 && c.good; }), bad = hl.checks.filter(function (c) { return c.score < 75 && c.step; }).sort(function (a, b) { return a.score - b.score; });
-    if (ok) {
-      html += '<div class="grid g2" style="margin-bottom:24px"><div class="card"><div class="sec-head"><h2>What\'s going well</h2><span class="badge success">' + good.length + (good.length === 1 ? " win" : " wins") + '</span></div><div class="stack" style="gap:12px">' +
-        (good.length ? good.map(function (c) { return insightTile(c.label, c.good, true); }).join("") : '<p class="muted">Nothing is in the green yet. The steps alongside are the best place to start.</p>') + "</div></div>" +
-        '<div class="card"><div class="sec-head"><h2>What to improve</h2><span class="badge warning">' + bad.length + (bad.length === 1 ? " action" : " actions") + '</span></div><div class="stack" style="gap:12px">' +
-        (bad.length ? bad.map(function (c) { return insightTile(c.step.title, c.step.detail, false, c.key); }).join("") : '<p class="muted">Every check is on track.</p>') + "</div></div></div>" +
-        '<p class="sm faint" style="margin:-12px 0 24px">Based on UK rules of thumb, not personal financial advice. <button class="link" data-action="health">See how each check works</button></p>' + chatCard();
-    } else {
-      html += '<div class="card" style="margin-bottom:24px"><h2 class="mb-md">Insights</h2><p class="muted">Import a few months of statements and fill in the Wealth page, and personalised insights appear here: what\'s going well and what to improve.</p></div>' + chatCard();
-    }
+    return '<div class="hero solo" style="margin-bottom:24px">' + healthBlock(m, txs, true) + "</div>" +
+      '<div class="grid g2" style="margin-bottom:24px"><div class="card"><div class="sec-head"><h2>What to improve</h2><span class="badge warning">' + bad.length + (bad.length === 1 ? " action" : " actions") + '</span></div><div class="stack" style="gap:12px">' +
+      (bad.length ? bad.map(function (c) { return insightTile(c.step.title, c.step.detail, false, c.key); }).join("") : '<p class="muted">Every check is on track.</p>') + "</div></div>" +
+      '<div class="card"><div class="sec-head"><h2>What\'s going well</h2><span class="badge success">' + good.length + (good.length === 1 ? " win" : " wins") + '</span></div><div class="stack" style="gap:12px">' +
+      (good.length ? good.map(function (c) { return insightTile(c.label, c.good, true); }).join("") : '<p class="muted">Nothing is in the green yet. The steps alongside are the best place to start.</p>') + "</div></div></div>" +
+      '<p class="sm faint" style="margin:-12px 0 24px">Based on UK rules of thumb, not personal financial advice. <button class="link" data-action="health">See how each check works</button></p>' + chatCard();
+  }
+  function planModel() {
+    initModel();
+    var html = "";
     var mm = S.model, dIt = S.items[mm.debtId], from = mm.tab === "debt" ? (dIt ? "Starting figures come from " + esc(dIt.name) + " on your Wealth page." : (debtItems().length ? "" : "Add your mortgage or loans on the Wealth page to start from your real figures.")) : mm.tab === "inv" ? (mm.from.inv ? "Starting amount is your ISAs, investments and pensions" + (mm.from.pm ? ", and monthly contribution is what goes into your pensions" : "") + "." : "") : (mm.from.prop ? "Starting value is your property on the Wealth page." : "");
     html += '<div class="card"><div><h2>Modelling</h2><p class="sm muted mt-xs">Adjust the assumptions to project future outcomes</p></div>' +
       '<div class="tabs" role="tablist" style="margin:16px 0 20px"><button type="button" role="tab" data-stab="inv" aria-selected="' + (mm.tab === "inv") + '">Investment growth</button><button type="button" role="tab" data-stab="prop" aria-selected="' + (mm.tab === "prop") + '">Property value</button><button type="button" role="tab" data-stab="debt" aria-selected="' + (mm.tab === "debt") + '">Mortgage &amp; debt</button></div>' +
@@ -1550,18 +1564,19 @@ code.secret { word-break: break-all; font-size: 12px; background: var(--bg-faint
       '<div class="g-lbl"><span class="g-num">' + score + '</span><span class="sm">/ 100</span></div></div>';
   }
   function stepAdded(title) { return vals(S.todos).some(function (t) { return t.label === title; }); }
-  function healthBlock(m, txs) {
+  function healthBlock(m, txs, brief) {
     var hl = health(m, txs);
     if (hl.checks.length < 2) {
       return '<div class="ring-wrap"><div><p style="font-weight:600">Financial health</p><p class="sm mt-xs">Add a few months of statements and your balance sheet on the Wealth page, and a health score appears here, checked against UK rules of thumb.</p></div></div>';
     }
     var steps = hl.checks.filter(function (c) { return c.step; }).sort(function (a, b) { return a.score - b.score; }).slice(0, 3);
+    if (brief) steps = [];
     return '<div class="ring-wrap">' + gaugeSvg(hl.score, 120) + '<div><p class="sm">' + icon("sparkle") + ' Financial health</p><p style="font-weight:600;font-size:17px" class="mt-xs">' + healthLabel(hl.score) + '</p><p class="sm mt-xs">' + hl.checks.length + " checks, " + (hl.months > 1 ? "averaged over " + hl.months + " full months" : hl.partial ? "from this month so far" : "from one month") + '.</p><button class="link hero-link mt-xs" data-action="health">How it\'s worked out</button></div></div>' +
       (steps.length ? '<p class="sm" style="margin:16px 0 10px">Ways to improve it</p><ul class="steps">' + steps.map(function (c) {
         var added = stepAdded(c.step.title);
         return '<li><div class="step-ico">' + icon(c.step.icon) + '</div><div style="flex:1;min-width:0"><p style="font-weight:500">' + esc(c.step.title) + '</p><p class="sm">' + esc(c.step.detail) + "</p></div>" +
           (S.canWrite ? '<button class="icon-btn hero-btn" data-step-todo="' + esc(c.key) + '" aria-label="' + (added ? "Added to to-do" : "Add to to-do") + '"' + (added ? " disabled" : "") + ">" + icon(added ? "check" : "plus") + "</button>" : "") + "</li>";
-      }).join("") + "</ul>" : '<p class="sm" style="margin-top:14px">Every check is on track.</p>');
+      }).join("") + "</ul>" : brief ? "" : '<p class="sm" style="margin-top:14px">Every check is on track.</p>');
   }
   function openHealth() {
     var m = currentMonth(), hl = health(m, allTx());
@@ -2834,7 +2849,7 @@ code.secret { word-break: break-all; font-size: 12px; background: var(--bg-faint
     openForm({ title: "What Claude sees", fields: [{ type: "html", html: '<p class="sm muted">This summary goes with each question, along with the conversation so far. It\'s built fresh from your figures each time.</p><pre class="shared">' + esc(chatContext()) + "</pre>" }], saveLabel: "Done", onSave: function () {} });
   }
   if (window.claude && typeof window.claude.use === "function") {
-    window.claude.use("sample").then(function (fn) { sampleFn = fn; sampleReady = true; if (S.page === "strategy") render(); }).catch(function () { sampleReady = true; if (S.page === "strategy") render(); });
+    window.claude.use("sample").then(function (fn) { sampleFn = fn; sampleReady = true; if (S.page === "plan") render(); }).catch(function () { sampleReady = true; if (S.page === "plan") render(); });
   } else { sampleReady = true; }
   document.addEventListener("click", function (e) {
     var t = e.target.closest && e.target.closest("[data-chat],[data-chat-q]"); if (!t || t.closest("dialog")) return;
@@ -2857,7 +2872,7 @@ code.secret { word-break: break-all; font-size: 12px; background: var(--bg-faint
     d.addEventListener("click", function (e) { if (e.target.closest("[data-close]") || e.target === d) d.close(); });
   });
   document.addEventListener("click", function (e) {
-    var t = e.target.closest("[data-page],[data-action],[data-tx],[data-acc],[data-goal],[data-stab],[data-wg],[data-cost-del],[data-cost-edit],[data-cost-todo],[data-witem],[data-wtab],[data-who],[data-wbx],[data-wbrange],[data-sptab],[data-sp-cat],[data-go-tx],[data-pick-month],[data-todo-del],[data-todo-filter],[data-bill-todo],[data-bill-ignore],[data-step-todo]");
+    var t = e.target.closest("[data-page],[data-action],[data-tx],[data-acc],[data-goal],[data-stab],[data-wg],[data-cost-del],[data-cost-edit],[data-cost-todo],[data-witem],[data-wtab],[data-who],[data-wbx],[data-wbrange],[data-sptab],[data-ptab],[data-sp-cat],[data-go-tx],[data-pick-month],[data-todo-del],[data-todo-filter],[data-bill-todo],[data-bill-ignore],[data-step-todo]");
     if (!t || t.closest("dialog")) return;
     var a;
     if ((a = t.getAttribute("data-page")) !== null) return go(a);
@@ -2905,6 +2920,7 @@ code.secret { word-break: break-all; font-size: 12px; background: var(--bg-faint
     if ((a = t.getAttribute("data-who")) !== null) { S.who = a; render(); if (!t.closest(".seg")) window.scrollTo(0, 0); return; }
     if ((a = t.getAttribute("data-wbx")) !== null) { S.wbOpen = S.wbOpen || {}; S.wbOpen[a] = !S.wbOpen[a]; return render(); }
     if ((a = t.getAttribute("data-wbrange")) !== null) { S.wbRange = +a === 12 ? 12 : 6; return render(); }
+    if ((a = t.getAttribute("data-ptab")) !== null) { S.planTab = a; render(); if (!t.closest('[role="tablist"]')) window.scrollTo(0, 0); return; }
     if ((a = t.getAttribute("data-sptab")) !== null) { S.spTab = a; render(); if (!t.closest('[role="tablist"]')) window.scrollTo(0, 0); return; }
     if ((a = t.getAttribute("data-sp-cat")) !== null) { S.txq = { q: "", month: S.txq.month, cat: a, acc: "all" }; S.spTab = "payments"; render(); return window.scrollTo(0, 0); }
     if ((a = t.getAttribute("data-go-tx")) !== null) { S.txq = { q: "", month: null, cat: "all", acc: "all" }; S.who = a || "all"; S.spTab = t.getAttribute("data-sp-tab") || "payments"; return go("transactions"); }
@@ -2975,10 +2991,10 @@ code.secret { word-break: break-all; font-size: 12px; background: var(--bg-faint
   });
   root.addEventListener("keydown", function (e) {
     var tab = e.target.closest && e.target.closest('[role="tab"]'); if (!tab || (e.key !== "ArrowRight" && e.key !== "ArrowLeft")) return;
-    var attr = tab.hasAttribute("data-stab") ? "data-stab" : "data-wtab";
-    var tabs = Array.prototype.slice.call(root.querySelectorAll('[' + attr + ']')), i = (tabs.indexOf(tab) + (e.key === "ArrowRight" ? 1 : -1) + tabs.length) % tabs.length, v = tabs[i].getAttribute(attr);
-    if (attr === "data-stab") S.model.tab = v; else S.wealthTab = v;
-    render(); var nt = root.querySelector('[' + attr + '="' + v + '"]'); if (nt) nt.focus();
+    var SET = { "data-stab": function (v) { S.model.tab = v; }, "data-wtab": function (v) { S.wealthTab = v; }, "data-sptab": function (v) { S.spTab = v; }, "data-ptab": function (v) { S.planTab = v; } };
+    var attr = Object.keys(SET).filter(function (k) { return tab.hasAttribute(k); })[0], bar = tab.closest('[role="tablist"]'); if (!attr || !bar) return;
+    var tabs = Array.prototype.slice.call(bar.querySelectorAll('[role="tab"][' + attr + ']')), i = (tabs.indexOf(tab) + (e.key === "ArrowRight" ? 1 : -1) + tabs.length) % tabs.length, v = tabs[i].getAttribute(attr);
+    SET[attr](v); render(); var nt = root.querySelector('[role="tab"][' + attr + '="' + v + '"]'); if (nt) nt.focus();
   });
   root.addEventListener("mouseover", function (e) {
     var r = e.target.closest && e.target.closest("[data-proj]"); if (!r) return;
