@@ -393,7 +393,7 @@ dialog.wide { width: min(640px, calc(100vw - 24px)); }
 
 .grid > * { min-width: 0; }
 .seg button { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
-@media (max-width: 640px) { .seg button { font-size: 13px; padding: 7px 4px; } .page-head .seg { max-width: 100%; } }
+@media (max-width: 640px) { .seg button { font-size: 13px; padding: 7px 4px; min-height: 44px; } .page-head .seg { max-width: 100%; } }
 
 .gauge { position: relative; flex-shrink: 0; }
 .gauge svg { width: 100%; height: 100%; display: block; }
@@ -726,8 +726,8 @@ code.secret { word-break: break-all; font-size: 12px; background: var(--bg-faint
     household: { household: "Our household", p1: "Person 1", p2: "Person 2" },
     history: { points: {} }, rules: {}, billsIgnore: [],
     loaded: false, mode: "connecting", canWrite: true,
-    wealthTab: "overview", wealthFilter: "all", upd: null, famTab: "overview", tags: null, todoTag: "", todoAddTag: "", todoDraft: "",
-    txq: { q: "", month: null, who: "all", cat: "all", acc: "all" }
+    wealthTab: "overview", who: "all", upd: null, famTab: "overview", tags: null, todoTag: "", todoAddTag: "", todoDraft: "",
+    txq: { q: "", month: null, cat: "all", acc: "all" }
   };
   var STORE = { items: "items", accounts: "accounts", tx: "txdocs", pots: "pots", goals: "goals", todos: "todos", costs: "costs" };
   var db = null, myId = null, txCache = null;
@@ -1571,14 +1571,14 @@ code.secret { word-break: break-all; font-size: 12px; background: var(--bg-faint
   // ══ Page: Spending ═════════════════════════════════════════════════════
   function pageTx() {
     var txs = allTx(), q = S.txq, month = q.month == null ? currentMonth() : q.month;
-    var head = pageHead("Spending", esc(month ? monthLabel(month, "long") : "All months") + ", newest first", S.canWrite ? '<button class="btn btn-primary" data-action="import">' + icon("upload") + "Import</button>" : "");
+    var head = pageHead("Spending", esc(month ? monthLabel(month, "long") : "All months") + ", newest first", personSwitch() + (S.canWrite ? '<button class="btn btn-primary" data-action="import">' + icon("upload") + "Import</button>" : ""));
     if (!txs.length) return head + emptyImport();
     var ms = txMonths().slice().reverse();
     var needle = q.q.trim().toLowerCase();
     var list = txs.filter(function (t) {
       if (month && t.d.slice(0, 7) !== month) return false;
       // A person's view includes their own accounts, plus joint payments they made
-      if (q.who !== "all" && !personTx([t], q.who).length) return false;
+      if (S.who !== "all" && !personTx([t], S.who).length) return false;
       if (q.acc !== "all" && t.acc !== q.acc) return false;
       if (q.cat !== "all" && t.cat !== q.cat) return false;
       if (needle && (t.m || "").toLowerCase().indexOf(needle) < 0) return false;
@@ -1588,14 +1588,13 @@ code.secret { word-break: break-all; font-size: 12px; background: var(--bg-faint
     var filters = '<div class="filters" role="search">' +
       '<input type="search" data-txq="q" placeholder="Search" value="' + esc(q.q) + '" aria-label="Search transactions">' +
       '<select data-txq="month" aria-label="Month"><option value=""' + (month ? "" : " selected") + '>All months</option>' + ms.map(function (m) { return '<option value="' + esc(m) + '"' + (month === m ? " selected" : "") + ">" + esc(monthLabel(m, "long")) + "</option>"; }).join("") + "</select>" +
-      '<select data-txq="who" aria-label="Whose"><option value="all">Everyone</option>' + ["p1", "p2", "joint"].map(function (o) { return '<option value="' + o + '"' + (q.who === o ? " selected" : "") + ">" + esc(ownerName(o)) + "</option>"; }).join("") + "</select>" +
       '<select data-txq="acc" aria-label="Account"><option value="all">All accounts</option>' + vals(S.accounts).map(function (a) { return '<option value="' + esc(a.id) + '"' + (q.acc === a.id ? " selected" : "") + ">" + esc(a.name) + "</option>"; }).join("") + "</select>" +
       '<select data-txq="cat" aria-label="Category"><option value="all">All categories</option>' + CATS.map(function (c) { return '<option value="' + c[0] + '"' + (q.cat === c[0] ? " selected" : "") + ">" + esc(c[1]) + "</option>"; }).join("") + "</select></div>";
     // Each total says which period it covers, so an all-time figure can't pass for this month's
     var mText = month ? (month.slice(0, 4) === monthKey().slice(0, 4) ? monthName(month) : monthLabel(month, "long")) : "";
     var inP = month ? " in " + mText : ", all months", ofP = month ? ", " + mText : ", all months";
     var tile = function (label, value, cls) { return '<div class="tile"><p class="sm muted">' + esc(label) + '</p><p class="num' + cls + '" style="font-weight:600;font-size:18px">' + value + "</p></div>"; };
-    var filtered = !!(q.q || q.month === "" || q.who !== "all" || q.acc !== "all" || q.cat !== "all");
+    var filtered = !!(q.q || q.month === "" || q.acc !== "all" || q.cat !== "all");
     if (filtered) filters = filters.replace(/<\/div>$/, '<button type="button" class="link filter-clear" data-action="tx-clear">Clear filters</button></div>');
     var shown = list.slice(0, 300);
     return head + '<div class="card">' + filters +
@@ -1677,9 +1676,9 @@ code.secret { word-break: break-all; font-size: 12px; background: var(--bg-faint
 
   // ══ Page: Wealth ═══════════════════════════════════════════════════════
   function wInFilter(i) {
-    if (S.wealthFilter === "all") return true;
-    if (i.group === "isa" && i.isaType === "jisa") return S.wealthFilter === "joint";
-    return (i.owner || "joint") === S.wealthFilter;
+    if (S.who === "all") return true;
+    if (i.group === "isa" && i.isaType === "jisa") return S.who === "joint";
+    return (i.owner || "joint") === S.who;
   }
   function wVisible() { return vals(S.items).filter(wInFilter); }
   function byGroup(items, g) { return items.filter(function (i) { return i.group === g; }).sort(function (a, b) { return (b.value || 0) - (a.value || 0); }); }
@@ -1695,11 +1694,14 @@ code.secret { word-break: break-all; font-size: 12px; background: var(--bg-faint
     if (months <= 0) return "Ending"; if (months < 24) return months + " month" + (months === 1 ? "" : "s"); return Math.round(months / 12) + " years";
   }
 
-  function pageWealth() {
+  // One person switch for Spending and Wealth. Whoever you pick on one is kept on the other, like the month.
+  function personSwitch() {
     var opts = [["all", "Everyone"], ["p1", S.household.p1], ["p2", S.household.p2], ["joint", "Joint"]];
-    var seg = '<div class="seg" role="group" aria-label="Show">' + opts.map(function (o) { return '<button type="button" data-wfilter="' + o[0] + '" aria-pressed="' + (S.wealthFilter === o[0]) + '">' + esc(o[1]) + "</button>"; }).join("") + "</div>";
+    return '<div class="seg" role="group" aria-label="Whose">' + opts.map(function (o) { return '<button type="button" data-who="' + o[0] + '" aria-pressed="' + (S.who === o[0]) + '">' + esc(o[1]) + "</button>"; }).join("") + "</div>";
+  }
+  function pageWealth() {
     var head = pageHead("Wealth balance sheet", esc(S.household.household) + ", " + esc(new Date().toLocaleDateString("en-GB", { month: "long", year: "numeric" })),
-      seg + (S.canWrite ? '<button class="btn btn-primary" data-action="witem">' + icon("plus") + "Add</button>" : ""));
+      personSwitch() + (S.canWrite ? '<button class="btn btn-primary" data-action="witem">' + icon("plus") + "Add</button>" : ""));
     var items = wVisible(), t = wTotals(items);
     var html = head + wKpis(t) + wUpdateStrip(items) + wTabs();
     if (S.wealthTab === "overview") html += wOverview(items, t);
@@ -1709,7 +1711,7 @@ code.secret { word-break: break-all; font-size: 12px; background: var(--bg-faint
     return html;
   }
   function ytdChange(currentNet) {
-    if (S.wealthFilter !== "all") return null;
+    if (S.who !== "all") return null;
     var start = monthKey(taxYear().start), keys = Object.keys(S.history.points || {}).sort();
     var base = keys.filter(function (k) { return k >= start; })[0];
     if (!base || base === monthKey()) return null;
@@ -1778,7 +1780,7 @@ code.secret { word-break: break-all; font-size: 12px; background: var(--bg-faint
     var cur = monthKey(), pts = S.history.points || {}, out = [], live = {};
     Object.keys(pts).sort().forEach(function (k) {
       var p = pts[k]; if (k >= cur || !p) return;
-      if (S.wealthFilter === "all") {
+      if (S.who === "all") {
         var a = Number(p.a) || 0, l = Number(p.l) || 0;
         out.push({ m: k, cls: p.c || null, lg: p.lg || null, items: p.i || null, assets: a, liabs: l, net: a - l });
       } else if (p.i) {
@@ -1822,9 +1824,9 @@ code.secret { word-break: break-all; font-size: 12px; background: var(--bg-faint
       var html = line("", first, total, side, list.length && !list.some(doneThisMonth));
       if (!isOpen) return html;
       list.forEach(function (i) {
-        html += line("it", "<span>" + esc(i.name) + '</span><span class="wb-sub">' + esc([i.provider, S.wealthFilter === "all" ? ownerShort(i) : ""].filter(Boolean).join(", ")) + "</span>", itemVal(i.id), side, !doneThisMonth(i));
+        html += line("it", "<span>" + esc(i.name) + '</span><span class="wb-sub">' + esc([i.provider, S.who === "all" ? ownerShort(i) : ""].filter(Boolean).join(", ")) + "</span>", itemVal(i.id), side, !doneThisMonth(i));
       });
-      if (S.wealthFilter === "all") {
+      if (S.who === "all") {
         // Totals include things you've since deleted, so show what's left over as its own line
         var gone = function (s) { var t = total(s); if (t == null || !s.items) return null; var sum = 0; list.forEach(function (i) { if (s.items[i.id] != null) sum += Number(s.items[i.id]) || 0; }); return t - sum; };
         if (snaps.some(function (s) { var g = gone(s); return g != null && Math.abs(g) >= 1; })) html += line("it", "<span>No longer listed</span>", gone, side);
@@ -1854,9 +1856,9 @@ code.secret { word-break: break-all; font-size: 12px; background: var(--bg-faint
     }
     var ranges = all.length > 6 ? '<div class="seg wb-range" role="group" aria-label="How many months">' + [6, 12].map(function (n) { return '<button type="button" data-wbrange="' + n + '" aria-pressed="' + (range === n) + '">' + n + " months</button>"; }).join("") + "</div>" : "";
     var note = "";
-    if (!prev) note = S.wealthFilter === "all"
+    if (!prev) note = S.who === "all"
       ? "Update your figures each month and a new column appears here, showing how every line changed."
-      : "Month-by-month figures for " + esc(S.wealthFilter === "joint" ? "joint things" : ownerName(S.wealthFilter)) + " build up from " + esc(monthLabel(monthKey(), "long")) + ". Choose Everyone to see your full history.";
+      : "Month-by-month figures for " + esc(S.who === "joint" ? "joint things" : ownerName(S.who)) + " build up from " + esc(monthLabel(monthKey(), "long")) + ". Choose Everyone to see your full history.";
     var table = '<div class="wb-scroll"><table class="wb"><caption class="sr-only">Balance sheet by month, with the change from the month before</caption>' + head + "<tbody>" + body + "</tbody></table></div>";
     if (gaps) {
       // Older snapshots only kept totals; say when line-by-line figures began
@@ -1885,7 +1887,7 @@ code.secret { word-break: break-all; font-size: 12px; background: var(--bg-faint
   function rowChev() { return S.canWrite ? '<span class="go">' + icon("chev") + "</span>" : ""; }
   function subLine(i) {
     var bits = []; if (i.group === "isa") bits.push(ISA_TYPES[i.isaType] || "ISA"); if (i.provider) bits.push(i.provider); if (i.group === "pension" && i.pmonthly) bits.push(gbp(i.pmonthly) + " a month going in"); if (i.group === "credit" && i.due) bits.push("due on the " + ordinal(+i.due));
-    return '<p class="sm muted">' + esc(bits.join(", ")) + (S.wealthFilter === "all" ? '<span class="owner-chip">' + esc(ownerShort(i)) + "</span>" : "") + "</p>";
+    return '<p class="sm muted">' + esc(bits.join(", ")) + (S.who === "all" ? '<span class="owner-chip">' + esc(ownerShort(i)) + "</span>" : "") + "</p>";
   }
   function assetRow(i) {
     return '<button type="button" class="item-row" data-witem="' + esc(i.id) + '"' + (S.canWrite ? ' aria-label="Edit ' + esc(i.name) + '"' : " disabled") + '><div style="min-width:0;flex:1"><p>' + esc(i.name) + "</p>" + subLine(i) + statusLine(i) + '</div><div class="r"><p class="num" style="font-weight:600">' + gbp(i.value) + "</p>" + changeLine(i) + "</div>" + rowChev() + "</button>";
@@ -1911,7 +1913,7 @@ code.secret { word-break: break-all; font-size: 12px; background: var(--bg-faint
   }
   function wInvestments(items) {
     var isa = byGroup(items, "isa"), pen = byGroup(items, "pension"), gen = byGroup(items, "general"), total = sumV(isa) + sumV(pen) + sumV(gen), ty = taxYear().label;
-    var people = S.wealthFilter === "all" ? ["p1", "p2"] : (S.wealthFilter === "joint" ? [] : [S.wealthFilter]);
+    var people = S.who === "all" ? ["p1", "p2"] : (S.who === "joint" ? [] : [S.who]);
     function usedBy(p) { return isa.filter(function (i) { return i.owner === p && i.isaType !== "jisa"; }).reduce(function (s, i) { return s + contribThisYear(i); }, 0); }
     var tiles = people.map(function (p) {
       var lisa = isa.filter(function (i) { return i.owner === p && i.isaType === "lisa"; }).reduce(function (s, i) { return s + contribThisYear(i); }, 0);
@@ -2300,7 +2302,7 @@ code.secret { word-break: break-all; font-size: 12px; background: var(--bg-faint
       el("f-name").value = it.name || ""; el("f-provider").value = it.provider || ""; fOwner.value = it.owner || "joint"; el("f-child").value = it.child || "";
       el("f-contrib").value = contribThisYear(it) ? contribThisYear(it).toLocaleString("en-GB") : ""; el("f-rate").value = it.rate != null ? it.rate : "";
       el("f-monthly").value = it.monthly || ""; el("f-pmonthly").value = it.pmonthly || ""; el("f-end").value = it.end || ""; el("f-limit").value = it.limit || ""; el("f-due").value = it.due || "";
-    } else if (S.wealthFilter !== "all") fOwner.value = S.wealthFilter === "joint" && fGroup.value === "isa" ? "p1" : S.wealthFilter;
+    } else if (S.who !== "all") fOwner.value = S.who === "joint" && fGroup.value === "isa" ? "p1" : S.who;
     valueLayout(it);
     var run = step && S.upd, more = run && S.upd.pos < S.upd.ids.length - 1;
     el("valueStep").hidden = !run; if (run) el("stepCount").textContent = (S.upd.pos + 1) + " of " + S.upd.ids.length;
@@ -2820,14 +2822,14 @@ code.secret { word-break: break-all; font-size: 12px; background: var(--bg-faint
     d.addEventListener("click", function (e) { if (e.target.closest("[data-close]") || e.target === d) d.close(); });
   });
   document.addEventListener("click", function (e) {
-    var t = e.target.closest("[data-page],[data-action],[data-tx],[data-acc],[data-goal],[data-stab],[data-wg],[data-cost-del],[data-cost-edit],[data-cost-todo],[data-witem],[data-wtab],[data-wfilter],[data-wbx],[data-wbrange],[data-fam],[data-go-tx],[data-pick-month],[data-todo-del],[data-todo-filter],[data-bill-todo],[data-bill-ignore],[data-step-todo]");
+    var t = e.target.closest("[data-page],[data-action],[data-tx],[data-acc],[data-goal],[data-stab],[data-wg],[data-cost-del],[data-cost-edit],[data-cost-todo],[data-witem],[data-wtab],[data-who],[data-wbx],[data-wbrange],[data-fam],[data-go-tx],[data-pick-month],[data-todo-del],[data-todo-filter],[data-bill-todo],[data-bill-ignore],[data-step-todo]");
     if (!t || t.closest("dialog")) return;
     var a;
     if ((a = t.getAttribute("data-page")) !== null) return go(a);
     if ((a = t.getAttribute("data-action")) !== null) {
       if (a === "settings") return openSettings();
       if (a === "health") return openHealth();
-      if (a === "tx-clear") { S.txq = { q: "", month: null, who: "all", cat: "all", acc: "all" }; return render(); }
+      if (a === "tx-clear") { S.txq = { q: "", month: null, cat: "all", acc: "all" }; return render(); }
       if (a === "model-reset") { var tb = S.model ? S.model.tab : "inv"; S.model = null; S.model0tab = tb; return render(); }
       if (!S.canWrite) return;
       if (a === "import") return openImport();
@@ -2864,11 +2866,11 @@ code.secret { word-break: break-all; font-size: 12px; background: var(--bg-faint
       if (!t.closest('[role="tablist"]')) { var tb = root.querySelector('.tabs [data-wtab]'); if (tb) tb.parentNode.scrollIntoView({ block: "start" }); }
       return;
     }
-    if ((a = t.getAttribute("data-wfilter")) !== null) { S.wealthFilter = a; return render(); }
+    if ((a = t.getAttribute("data-who")) !== null) { S.who = a; return render(); }
     if ((a = t.getAttribute("data-wbx")) !== null) { S.wbOpen = S.wbOpen || {}; S.wbOpen[a] = !S.wbOpen[a]; return render(); }
     if ((a = t.getAttribute("data-wbrange")) !== null) { S.wbRange = +a === 12 ? 12 : 6; return render(); }
     if ((a = t.getAttribute("data-fam")) !== null) { S.famTab = a; render(); return window.scrollTo(0, 0); }
-    if ((a = t.getAttribute("data-go-tx")) !== null) { S.txq = { q: "", month: null, who: a || "all", cat: "all", acc: "all" }; return go("transactions"); }
+    if ((a = t.getAttribute("data-go-tx")) !== null) { S.txq = { q: "", month: null, cat: "all", acc: "all" }; S.who = a || "all"; return go("transactions"); }
     if ((a = t.getAttribute("data-pick-month")) !== null) { S.month = a; return render(); }
     if ((a = t.getAttribute("data-todo-del")) !== null) {
       var td = S.todos[a]; if (!td || !S.canWrite) return;
