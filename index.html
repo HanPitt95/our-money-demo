@@ -228,8 +228,8 @@ dialog::backdrop { background: rgba(20, 5, 77, 0.35); }
 /* Monthly value update at the top of the edit window */
 .value-top { background: var(--bg-faint); border-radius: var(--corner-md); padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; }
 .value-top h3 { font-size: 15px; }
-.value-top .money input { font-size: 18px; font-weight: 600; padding-top: 10px; padding-bottom: 10px; }
-.value-top .money input::placeholder { color: var(--text-tertiary); font-weight: 500; }
+.value-top #valueField .money input { font-size: 18px; font-weight: 600; padding-top: 10px; padding-bottom: 10px; }
+.value-top #valueField .money input::placeholder { color: var(--text-tertiary); font-weight: 500; }
 .value-chg { font-weight: 600; }
 .details-head { font-size: 13px; color: var(--text-secondary); margin-top: 6px; }
 .value-keep { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
@@ -243,7 +243,7 @@ dialog::backdrop { background: rgba(20, 5, 77, 0.35); }
 .upd-chip { margin-top: 6px; }
 .upd-done { display: flex; align-items: center; gap: 4px; margin-top: 4px; }
 .upd-done .ico { width: 12px; height: 12px; }
-.wb .upd-not { color: var(--warning-text); }
+.wb .upd-not, .warn-text { color: var(--warning-text); }
 .item-row .go { color: var(--text-tertiary); align-self: center; display: flex; }
 .item-row.liab .go { align-self: flex-start; padding-top: 2px; }
 @media (max-width: 640px) {
@@ -533,11 +533,13 @@ code.secret { word-break: break-all; font-size: 12px; background: var(--bg-faint
         <p class="err" id="valueErr" hidden>Enter an amount, like 12500.</p>
       </div>
       <div id="valueSlot" hidden></div>
-      <div class="field" data-for="isa">
+      <div class="field" data-for="isa" id="contribField">
         <label for="f-contrib">Paid in this tax year</label>
         <div class="money"><input id="f-contrib" inputmode="decimal" autocomplete="off"></div>
         <p class="hint" id="contribHint"></p>
+        <p class="hint" id="contribAsOf" hidden></p>
       </div>
+      <div id="contribSlot" hidden></div>
       <div class="field" data-for="pension">
         <label for="f-pmonthly">Paid in each month (yours plus employer's)</label>
         <div class="money"><input id="f-pmonthly" inputmode="decimal" autocomplete="off"></div>
@@ -1799,9 +1801,13 @@ code.secret { word-break: break-all; font-size: 12px; background: var(--bg-faint
     var body = list.length ? '<div class="rows">' + list.map(G.side === "liab" ? liabRow : assetRow).join("") + "</div>" : '<div class="empty"><span>No ' + esc(G.label.toLowerCase()) + " added yet.</span>" + (S.canWrite ? '<button class="btn btn-subtle" data-action="witem" data-group="' + g + '">' + icon("plus") + "Add " + esc(G.one) + "</button>" : "") + "</div>";
     return '<div class="card"><div class="sec-head"><div class="sec-title"><div class="icon-tile">' + icon(G.icon) + "</div><h2>" + esc(G.label) + '</h2></div><div class="sec-title"><span class="num" style="font-weight:600">' + gbp(sumV(list)) + "</span>" + (S.canWrite && list.length ? '<button class="icon-btn" data-action="witem" data-group="' + g + '" aria-label="Add ' + esc(G.one) + '">' + icon("plus") + "</button>" : "") + "</div></div>" + body + "</div>";
   }
-  function allowanceTile(label, sub, used, allowance) {
+  // When an ISA's paid-in figure was last set or checked in the monthly update
+  function contribAt(it) { return it.contribAt || it.updatedAt || it.createdAt; }
+  function oldestContrib(list) { return list.map(contribAt).filter(Boolean).sort()[0] || null; }
+  function allowanceTile(label, sub, used, allowance, asOf) {
     var pct = Math.min(100, Math.round(used / allowance * 100)), left = Math.max(0, allowance - used), maxed = used >= allowance;
-    return '<div class="tile"><div class="row-between mb-md" style="align-items:flex-start"><div><h3>' + esc(label) + '</h3><p class="sm muted">' + esc(sub) + '</p></div><span class="badge ' + (maxed ? "warning" : "success") + '">' + (maxed ? "Fully used" : gbp(left) + " left") + "</span></div>" + bar(pct, maxed ? "warn" : "") + '<div class="row-between mt-xs"><span class="sm muted">' + gbp(used) + ' paid in</span><span class="sm faint">of ' + gbp(allowance) + "</span></div></div>";
+    return '<div class="tile"><div class="row-between mb-md" style="align-items:flex-start"><div><h3>' + esc(label) + '</h3><p class="sm muted">' + esc(sub) + '</p></div><span class="badge ' + (maxed ? "warning" : "success") + '">' + (maxed ? "Fully used" : gbp(left) + " left") + "</span></div>" + bar(pct, maxed ? "warn" : "") + '<div class="row-between mt-xs"><span class="sm muted">' + gbp(used) + ' paid in</span><span class="sm faint">of ' + gbp(allowance) + "</span></div>" +
+      (asOf ? (monthOf(asOf) === monthKey() ? '<p class="sm faint mt-xs">Paid-in figure checked ' + esc(shortDate(asOf)) + "</p>" : '<p class="sm warn-text mt-xs">Paid-in figure last checked ' + esc(shortDate(asOf)) + ". Check it before paying in more.</p>") : "") + "</div>";
   }
   function wInvestments(items) {
     var isa = byGroup(items, "isa"), pen = byGroup(items, "pension"), gen = byGroup(items, "general"), total = sumV(isa) + sumV(pen) + sumV(gen), ty = taxYear().label;
@@ -1809,10 +1815,10 @@ code.secret { word-break: break-all; font-size: 12px; background: var(--bg-faint
     function usedBy(p) { return isa.filter(function (i) { return i.owner === p && i.isaType !== "jisa"; }).reduce(function (s, i) { return s + contribThisYear(i); }, 0); }
     var tiles = people.map(function (p) {
       var lisa = isa.filter(function (i) { return i.owner === p && i.isaType === "lisa"; }).reduce(function (s, i) { return s + contribThisYear(i); }, 0);
-      return allowanceTile(ownerName(p) + "'s ISA allowance", "All ISAs combined" + (lisa ? ", including " + gbp(lisa) + " in a Lifetime ISA" : ""), usedBy(p), ADULT_ISA_ALLOWANCE);
+      return allowanceTile(ownerName(p) + "'s ISA allowance", "All ISAs combined" + (lisa ? ", including " + gbp(lisa) + " in a Lifetime ISA" : ""), usedBy(p), ADULT_ISA_ALLOWANCE, oldestContrib(isa.filter(function (i) { return i.owner === p && i.isaType !== "jisa"; })));
     });
-    var kids = {}; isa.filter(function (i) { return i.isaType === "jisa"; }).forEach(function (i) { var k = (i.child || "Child").trim(); kids[k] = (kids[k] || 0) + contribThisYear(i); });
-    Object.keys(kids).forEach(function (k) { tiles.push(allowanceTile("Junior ISA for " + k, "Everyone's payments in count", kids[k], JUNIOR_ISA_ALLOWANCE)); });
+    var kids = {}, kidIsas = {}; isa.filter(function (i) { return i.isaType === "jisa"; }).forEach(function (i) { var k = (i.child || "Child").trim(); kids[k] = (kids[k] || 0) + contribThisYear(i); (kidIsas[k] = kidIsas[k] || []).push(i); });
+    Object.keys(kids).forEach(function (k) { tiles.push(allowanceTile("Junior ISA for " + k, "Everyone's payments in count", kids[k], JUNIOR_ISA_ALLOWANCE, oldestContrib(kidIsas[k]))); });
     var adultLeft = people.reduce(function (s, p) { return s + Math.max(0, ADULT_ISA_ALLOWANCE - usedBy(p)); }, 0);
     return '<div class="stack"><div class="grid g3 kpis">' +
       '<div class="card"><div class="kpi-head"><span class="muted">Invested in total</span>' + icon("chart", "faint") + '</div><p class="big">' + gbp(total) + '</p><p class="sm faint mt-xs">ISAs, pensions and other investments</p></div>' +
@@ -2066,7 +2072,7 @@ code.secret { word-break: break-all; font-size: 12px; background: var(--bg-faint
   }
   fGroup.addEventListener("change", syncForm); fIsa.addEventListener("change", syncForm);
   // ── The monthly update: when editing, the value sits at the top with last month's figure for context
-  var valueField = el("valueField"), valueTop = el("valueTop"), valueSlot = el("valueSlot"), VCTX = null;
+  var valueField = el("valueField"), valueTop = el("valueTop"), valueSlot = el("valueSlot"), contribField = el("contribField"), contribSlot = el("contribSlot"), VCTX = null;
   function monthOf(iso) { var d = new Date(iso || ""); return isNaN(d) ? null : monthKey(d); }
   // checkedAt is when this month's figure was confirmed: a new one typed in, or the old one kept
   function checkedAt(it) { return it.checkedAt || it.valueAt || it.updatedAt || it.createdAt; }
@@ -2092,8 +2098,11 @@ code.secret { word-break: break-all; font-size: 12px; background: var(--bg-faint
   }
   el("f-value").addEventListener("input", valueChange);
   function valueLayout(it) {
-    var hint = el("valueHint");
+    var hint = el("valueHint"), isaTop = !!(it && it.group === "isa");
     el("valueChg").hidden = true; el("f-value").value = "";
+    // An ISA's paid-in figure drives "allowance left", so it's updated alongside the value
+    if (isaTop) valueTop.appendChild(contribField); else contribSlot.parentNode.insertBefore(contribField, contribSlot);
+    el("contribAsOf").hidden = !isaTop; if (isaTop) el("contribAsOf").textContent = "Last checked " + shortDate(contribAt(it)) + ".";
     if (!it) {
       // Adding something new: the value stays in its usual place among the details
       VCTX = null; valueTop.hidden = true; el("detailsHead").hidden = true; valueSlot.parentNode.insertBefore(valueField, valueSlot);
@@ -2135,7 +2144,7 @@ code.secret { word-break: break-all; font-size: 12px; background: var(--bg-faint
     el("itemTitle").textContent = it ? "Edit " + it.name : "Add " + GROUPS[fGroup.value].one;
     if (it) {
       el("f-name").value = it.name || ""; el("f-provider").value = it.provider || ""; fOwner.value = it.owner || "joint"; el("f-child").value = it.child || "";
-      el("f-contrib").value = contribThisYear(it) || ""; el("f-rate").value = it.rate != null ? it.rate : "";
+      el("f-contrib").value = contribThisYear(it) ? contribThisYear(it).toLocaleString("en-GB") : ""; el("f-rate").value = it.rate != null ? it.rate : "";
       el("f-monthly").value = it.monthly || ""; el("f-pmonthly").value = it.pmonthly || ""; el("f-end").value = it.end || ""; el("f-limit").value = it.limit || ""; el("f-due").value = it.due || "";
     } else if (S.wealthFilter !== "all") fOwner.value = S.wealthFilter === "joint" && fGroup.value === "isa" ? "p1" : S.wealthFilter;
     valueLayout(it);
@@ -2162,7 +2171,9 @@ code.secret { word-break: break-all; font-size: 12px; background: var(--bg-faint
     if (raw || keep || !prev) it.checkedAt = now; else if (prev.checkedAt) it.checkedAt = prev.checkedAt;
     if (prev && !same) { it.prevValue = prev.value; it.prevAt = prev.valueAt || prev.updatedAt || prev.createdAt; }
     else if (prev && prev.prevValue != null) { it.prevValue = prev.prevValue; it.prevAt = prev.prevAt; }
-    if (g === "isa") { it.isaType = fIsa.value; var c = parseMoney(el("f-contrib").value); it.contrib = c && !isNaN(c) ? c : 0; it.contribYear = taxYear().label; if (it.isaType === "jisa") { it.child = el("f-child").value.trim() || "Child"; it.owner = "joint"; } }
+    if (g === "isa") { it.isaType = fIsa.value; var c = parseMoney(el("f-contrib").value); it.contrib = c && !isNaN(c) ? c : 0; it.contribYear = taxYear().label;
+      // contribAt: when the paid-in figure last changed, or was checked as part of the monthly update
+      it.contribAt = !prev || raw || keep || it.contrib !== contribThisYear(prev) ? now : contribAt(prev); if (it.isaType === "jisa") { it.child = el("f-child").value.trim() || "Child"; it.owner = "joint"; } }
     if (g === "mortgage" || g === "loan") { var r = parseMoney(el("f-rate").value); it.rate = r != null && !isNaN(r) ? r : null; var m = parseMoney(el("f-monthly").value); it.monthly = m && !isNaN(m) ? m : null; it.end = el("f-end").value || null; }
     if (g === "pension") { var pm = parseMoney(el("f-pmonthly").value); it.pmonthly = pm && !isNaN(pm) ? pm : null; }
     if (g === "credit") { var l = parseMoney(el("f-limit").value); it.limit = l && !isNaN(l) ? l : null; var d = parseInt(el("f-due").value, 10); it.due = d >= 1 && d <= 31 ? d : null; }
