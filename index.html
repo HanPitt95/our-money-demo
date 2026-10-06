@@ -12,13 +12,13 @@
 :root {
   --brand-primary: #b3005e; --brand-hover: #99004f; --brand-secondary: #f7a8cd; --brand-tertiary: #fde7f1; --brand-muted: #c76a97;
   --success: #8fbb74; --success-text: #4d7a33; --warning: #f9da84; --warning-text: #8a6410; --danger: #e5484d; --danger-text: #b3262b;
-  --surface-bg: #ffffff; --surface-hover: #fdf0f6; --bg-faint: #b3005e0a; --border-primary: #b3005e1f;
-  --text-primary: #2b1f28; --text-secondary: #2b1f28a6; --text-tertiary: #2b1f2870; --pastel-tile: #fde7f1; --on-brand: #ffffff;
+  --surface-bg: #ffffff; --surface-hover: #fdf0f6; --bg-faint: #b3005e0a; --border-primary: #b3005e1f; --border-input: #b3005e8c;
+  --text-primary: #2b1f28; --text-secondary: #2b1f28b8; --text-tertiary: #2b1f28a6; --pastel-tile: #fde7f1; --on-brand: #ffffff;
   --chart-in: #b3005e; --chart-out: #e8a020;
   --asset-property: #7d0040; --asset-pensions: #2b8a9e; --asset-investments: #6f9e57; --asset-cash: #e8a020; --asset-other: #f2a9cf; --asset-debt: #8a7f86;
   --page-base: #ffffff;
   --gradient-page: linear-gradient(160deg, rgba(227,50,146,0.14) 0%, rgba(249,145,175,0.08) 45%, rgba(249,218,132,0.16) 100%);
-  --gradient-hero: linear-gradient(135deg, #e33292 0%, #f2688f 55%, #f9da84 125%);
+  --gradient-hero: linear-gradient(135deg, #c0126f 0%, #d0306a 55%, #c4501a 125%);
   --shadow: 0 12px 32px rgba(43,31,40,0.16);
   --corner-md: 10px;
   --corner-lg: 20px;
@@ -29,7 +29,7 @@
   :root:not([data-theme="light"]) {
     --brand-primary: #f37bb0; --brand-hover: #f79ac4; --brand-secondary: #7d0040; --brand-tertiary: #2b111f; --brand-muted: #c76a97;
     --success-text: #a9d38f; --warning-text: #f3cf6b; --danger-text: #ff8b8e;
-    --surface-bg: #2a1621; --surface-hover: #361d2b; --bg-faint: #ffffff0d; --border-primary: #ffffff1f;
+    --surface-bg: #2a1621; --surface-hover: #361d2b; --bg-faint: #ffffff0d; --border-primary: #ffffff1f; --border-input: #ffffff59;
     --text-primary: #f6eaf0; --text-secondary: #f6eaf0b3; --text-tertiary: #f6eaf080; --pastel-tile: #45203a; --on-brand: #2b111f;
     --chart-in: #f37bb0; --chart-out: #f2b84b; --asset-property: #d0578f; --asset-other: #f7c3dc; --asset-debt: #a89aa2;
     --page-base: #1c0f16;
@@ -41,7 +41,7 @@
 :root[data-theme="dark"] {
     --brand-primary: #f37bb0; --brand-hover: #f79ac4; --brand-secondary: #7d0040; --brand-tertiary: #2b111f; --brand-muted: #c76a97;
     --success-text: #a9d38f; --warning-text: #f3cf6b; --danger-text: #ff8b8e;
-    --surface-bg: #2a1621; --surface-hover: #361d2b; --bg-faint: #ffffff0d; --border-primary: #ffffff1f;
+    --surface-bg: #2a1621; --surface-hover: #361d2b; --bg-faint: #ffffff0d; --border-primary: #ffffff1f; --border-input: #ffffff59;
     --text-primary: #f6eaf0; --text-secondary: #f6eaf0b3; --text-tertiary: #f6eaf080; --pastel-tile: #45203a; --on-brand: #2b111f;
     --chart-in: #f37bb0; --chart-out: #f2b84b; --asset-property: #d0578f; --asset-other: #f7c3dc; --asset-debt: #a89aa2;
     --page-base: #1c0f16;
@@ -232,6 +232,25 @@ dialog::backdrop { background: rgba(20, 5, 77, 0.35); }
 .value-top .money input::placeholder { color: var(--text-tertiary); font-weight: 500; }
 .value-chg { font-weight: 600; }
 .details-head { font-size: 13px; color: var(--text-secondary); margin-top: 6px; }
+.value-keep { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+#valueStep .link { font-size: 12px; }
+/* What's left in this month's update */
+.upd-strip { display: flex; align-items: center; gap: 16px; background: var(--surface-bg); border-radius: var(--corner-lg); padding: 16px 24px; margin-top: 24px; }
+.upd-strip .upd-text { flex: 1; min-width: 0; }
+.upd-strip .bar { margin-top: 8px; max-width: 360px; }
+.upd-strip.done { color: var(--success-text); }
+.upd-strip.done .ico { width: 20px; height: 20px; }
+.upd-chip { margin-top: 6px; }
+.upd-done { display: flex; align-items: center; gap: 4px; margin-top: 4px; }
+.upd-done .ico { width: 12px; height: 12px; }
+.wb .upd-not { color: var(--warning-text); }
+.item-row .go { color: var(--text-tertiary); align-self: center; display: flex; }
+.item-row.liab .go { align-self: flex-start; padding-top: 2px; }
+@media (max-width: 640px) {
+  .upd-strip { flex-direction: column; align-items: stretch; padding: 16px; }
+  .upd-strip .bar { max-width: none; }
+  .upd-strip .btn { justify-content: center; }
+}
 .two { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 .err { color: var(--danger-text); font-size: 12px; }
 [hidden] { display: none !important; }
@@ -265,9 +284,9 @@ dialog::backdrop { background: rgba(20, 5, 77, 0.35); }
 .g4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 .span2 { grid-column: span 2; }
 .hero { background: var(--gradient-hero); color: #fff; border-radius: var(--corner-lg); padding: 24px; position: relative; overflow: hidden; }
-.hero .muted, .hero .sm { color: rgba(255,255,255,0.75); }
+.hero .muted, .hero .sm { color: #fff; }
 .hero .big { font-size: 34px; }
-.hero .badge { background: rgba(255,255,255,0.18); color: #fff; }
+.hero .badge { background: rgba(255,255,255,0.12); color: #fff; }
 .ring-wrap { display: flex; align-items: center; gap: 16px; margin-top: 20px; padding-top: 20px; border-top: 1px solid rgba(255,255,255,0.2); }
 .ring { width: 96px; height: 96px; position: relative; flex-shrink: 0; }
 .ring svg { width: 100%; height: 100%; transform: rotate(-90deg); }
@@ -319,6 +338,7 @@ dialog::backdrop { background: rgba(20, 5, 77, 0.35); }
 .filters { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px; }
 .filters input, .filters select { border: 1px solid var(--border-primary); background: var(--surface-bg); border-radius: var(--corner-md); padding: 8px 12px; min-width: 0; }
 .filters input { flex: 1 1 200px; }
+.filters .filter-clear { padding: 8px 4px; white-space: nowrap; }
 .cat-chip { font-size: 11px; font-weight: 500; padding: 1px 7px; border-radius: 999px; background: var(--bg-faint); color: var(--text-secondary); margin-left: 6px; }
 .pot-card { display: flex; flex-direction: column; gap: 14px; }
 .pot-add { border: 1.5px dashed var(--border-primary); background: transparent; border-radius: var(--corner-lg); min-height: 200px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; cursor: pointer; color: var(--text-secondary); }
@@ -344,7 +364,10 @@ dialog::backdrop { background: rgba(20, 5, 77, 0.35); }
 .bnav { display: none; }
 dialog.wide { width: min(640px, calc(100vw - 24px)); }
 .link { background: none; border: 0; padding: 0; color: var(--brand-primary); cursor: pointer; font-weight: 500; }
-.danger-zone { border-top: 1px solid var(--border-primary); padding-top: 14px; }
+.danger-zone { border: 1px solid var(--danger); }
+.danger-zone h3 { color: var(--danger-text); }
+.btn-destroy { background: #b3262b; color: #fff; }
+.btn-destroy:hover { background: #8f1c20; }
 @media (max-width: 900px) {
   .g4 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .span2 { grid-column: auto; }
@@ -384,7 +407,7 @@ dialog.wide { width: min(640px, calc(100vw - 24px)); }
 
 .span2 > .card { height: 100%; }
 
-.hero-title { background: none; border: 0; padding: 0; color: rgba(255,255,255,0.85); cursor: pointer; display: inline-flex; align-items: center; gap: 4px; font-size: 13px; text-align: left; }
+.hero-title { background: none; border: 0; padding: 0; color: #fff; cursor: pointer; display: inline-flex; align-items: center; gap: 4px; font-size: 13px; text-align: left; }
 .hero-title:hover { color: #fff; }
 .spark { width: 100%; height: 28px; display: block; margin-top: 14px; }
 .spark-key { display: flex; align-items: center; gap: 6px; margin-top: 4px; }
@@ -441,6 +464,8 @@ pre.shared { white-space: pre-wrap; font-size: 12px; background: var(--bg-faint)
 .qr { display: grid; place-items: center; background: #fff; border-radius: var(--corner-md); padding: 12px; margin-bottom: 10px; }
 .qr img { width: 180px; height: 180px; }
 code.secret { word-break: break-all; font-size: 12px; background: var(--bg-faint); padding: 2px 6px; border-radius: 6px; }
+/* Form fields need a visible edge, so empty boxes don't vanish */
+.field input, .field select, .add-row input, .filters input, .filters select, .cost-form input, .sl-num input, .chat-form textarea { border-color: var(--border-input); }
 </style>
 </head>
 <body>
@@ -448,7 +473,7 @@ code.secret { word-break: break-all; font-size: 12px; background: var(--bg-faint
   <nav class="rail" aria-label="Main">
     <div class="mark" aria-hidden="true">£</div>
     <button class="rail-btn" data-page="home" aria-label="Home"><svg class="ico"><use href="#i-home"/></svg></button>
-    <button class="rail-btn" data-page="transactions" aria-label="Transactions"><svg class="ico"><use href="#i-list"/></svg></button>
+    <button class="rail-btn" data-page="transactions" aria-label="Spending"><svg class="ico"><use href="#i-list"/></svg></button>
     <button class="rail-btn" data-page="family" aria-label="Family accounts"><svg class="ico"><use href="#i-users"/></svg></button>
     <button class="rail-btn" data-page="strategy" aria-label="Financial strategy"><svg class="ico"><use href="#i-compass"/></svg></button>
     <button class="rail-btn" data-page="wealth" aria-label="Wealth balance sheet"><svg class="ico"><use href="#i-chart"/></svg></button>
@@ -479,7 +504,10 @@ code.secret { word-break: break-all; font-size: 12px; background: var(--bg-faint
       <button type="button" class="icon-btn" data-close aria-label="Close"><svg class="ico"><use href="#i-x"/></svg></button>
     </div>
     <div class="dlg-body">
-      <div class="value-top" id="valueTop" hidden><h3 id="valueMonth">Update</h3></div>
+      <div class="value-top" id="valueTop" hidden>
+        <div class="row-between"><h3 id="valueMonth">Update</h3><p class="sm muted" id="valueStep" hidden><span id="stepCount"></span> · <button type="button" class="link" id="skipBtn">Skip for now</button></p></div>
+        <div class="value-keep" id="valueKeep" hidden><button type="button" class="btn btn-neutral" id="keepBtn">Keep</button><span class="sm muted" id="keepNote"></span></div>
+      </div>
       <h3 class="details-head" id="detailsHead" hidden>Details</h3>
       <div class="field"><label for="f-group">Type</label><select id="f-group"></select></div>
       <div class="field" data-for="isa">
@@ -683,8 +711,8 @@ code.secret { word-break: break-all; font-size: 12px; background: var(--bg-faint
     household: { household: "Our household", p1: "Person 1", p2: "Person 2" },
     history: { points: {} }, rules: {}, billsIgnore: [],
     loaded: false, mode: "connecting", canWrite: true,
-    wealthTab: "overview", wealthFilter: "all", famTab: "overview", tags: null, todoTag: "", todoAddTag: "", todoDraft: "",
-    txq: { q: "", month: "", who: "all", cat: "all", acc: "all" }
+    wealthTab: "overview", wealthFilter: "all", upd: null, famTab: "overview", tags: null, todoTag: "", todoAddTag: "", todoDraft: "",
+    txq: { q: "", month: null, who: "all", cat: "all", acc: "all" }
   };
   var STORE = { items: "items", accounts: "accounts", tx: "txdocs", pots: "pots", goals: "goals", todos: "todos", costs: "costs" };
   var db = null, myId = null, txCache = null;
@@ -1454,15 +1482,15 @@ code.secret { word-break: break-all; font-size: 12px; background: var(--bg-faint
     });
   }
 
-  // ══ Page: Transactions ═════════════════════════════════════════════════
+  // ══ Page: Spending ═════════════════════════════════════════════════════
   function pageTx() {
-    var txs = allTx(), q = S.txq;
-    var head = pageHead("Transactions", "Everything you've imported, newest first", S.canWrite ? '<button class="btn btn-primary" data-action="import">' + icon("upload") + "Import</button>" : "");
+    var txs = allTx(), q = S.txq, month = q.month == null ? currentMonth() : q.month;
+    var head = pageHead("Spending", esc(month ? monthLabel(month, "long") : "All months") + ", newest first", S.canWrite ? '<button class="btn btn-primary" data-action="import">' + icon("upload") + "Import</button>" : "");
     if (!txs.length) return head + emptyImport();
     var ms = txMonths().slice().reverse();
     var needle = q.q.trim().toLowerCase();
     var list = txs.filter(function (t) {
-      if (q.month && t.d.slice(0, 7) !== q.month) return false;
+      if (month && t.d.slice(0, 7) !== month) return false;
       // A person's view includes their own accounts, plus joint payments they made
       if (q.who !== "all" && !personTx([t], q.who).length) return false;
       if (q.acc !== "all" && t.acc !== q.acc) return false;
@@ -1473,14 +1501,20 @@ code.secret { word-break: break-all; font-size: 12px; background: var(--bg-faint
     var st = stats(list);
     var filters = '<div class="filters" role="search">' +
       '<input type="search" data-txq="q" placeholder="Search" value="' + esc(q.q) + '" aria-label="Search transactions">' +
-      '<select data-txq="month" aria-label="Month"><option value="">All months</option>' + ms.map(function (m) { return '<option value="' + esc(m) + '"' + (q.month === m ? " selected" : "") + ">" + esc(monthLabel(m, "long")) + "</option>"; }).join("") + "</select>" +
+      '<select data-txq="month" aria-label="Month"><option value=""' + (month ? "" : " selected") + '>All months</option>' + ms.map(function (m) { return '<option value="' + esc(m) + '"' + (month === m ? " selected" : "") + ">" + esc(monthLabel(m, "long")) + "</option>"; }).join("") + "</select>" +
       '<select data-txq="who" aria-label="Whose"><option value="all">Everyone</option>' + ["p1", "p2", "joint"].map(function (o) { return '<option value="' + o + '"' + (q.who === o ? " selected" : "") + ">" + esc(ownerName(o)) + "</option>"; }).join("") + "</select>" +
       '<select data-txq="acc" aria-label="Account"><option value="all">All accounts</option>' + vals(S.accounts).map(function (a) { return '<option value="' + esc(a.id) + '"' + (q.acc === a.id ? " selected" : "") + ">" + esc(a.name) + "</option>"; }).join("") + "</select>" +
       '<select data-txq="cat" aria-label="Category"><option value="all">All categories</option>' + CATS.map(function (c) { return '<option value="' + c[0] + '"' + (q.cat === c[0] ? " selected" : "") + ">" + esc(c[1]) + "</option>"; }).join("") + "</select></div>";
+    // Each total says which period it covers, so an all-time figure can't pass for this month's
+    var mText = month ? (month.slice(0, 4) === monthKey().slice(0, 4) ? monthName(month) : monthLabel(month, "long")) : "";
+    var inP = month ? " in " + mText : ", all months", ofP = month ? ", " + mText : ", all months";
+    var tile = function (label, value, cls) { return '<div class="tile"><p class="sm muted">' + esc(label) + '</p><p class="num' + cls + '" style="font-weight:600;font-size:18px">' + value + "</p></div>"; };
+    var filtered = !!(q.q || q.month === "" || q.who !== "all" || q.acc !== "all" || q.cat !== "all");
+    if (filtered) filters = filters.replace(/<\/div>$/, '<button type="button" class="link filter-clear" data-action="tx-clear">Clear filters</button></div>');
     var shown = list.slice(0, 300);
     return head + '<div class="card">' + filters +
-      '<div class="grid g3 mb-lg" style="gap:12px"><div class="tile"><p class="sm muted">Transactions</p><p class="num" style="font-weight:600;font-size:18px">' + list.length.toLocaleString("en-GB") + '</p></div><div class="tile"><p class="sm muted">Money in</p><p class="num pos" style="font-weight:600;font-size:18px">' + gbp(st.inc) + '</p></div><div class="tile"><p class="sm muted">Spending</p><p class="num" style="font-weight:600;font-size:18px">' + gbp(st.out) + "</p></div></div>" +
-      (shown.length ? '<div class="rows">' + shown.map(function (t) { return txRow(t, true); }).join("") + "</div>" : '<p class="muted">No transactions match.</p>') +
+      '<div class="grid g3 mb-lg" style="gap:12px">' + tile("Spent" + inP, gbp(st.out), "") + tile("Money in" + ofP, gbp(st.inc), " pos") + tile("Payments" + inP, list.length.toLocaleString("en-GB"), "") + "</div>" +
+      (shown.length ? '<div class="rows">' + shown.map(function (t) { return txRow(t, true); }).join("") + "</div>" : '<p class="muted">Nothing matches these filters.' + (filtered ? ' <button type="button" class="link" data-action="tx-clear">Clear filters</button>' : "") + "</p>") +
       (list.length > 300 ? '<p class="sm muted mt-md">Showing the latest 300. Narrow the filters to see others.</p>' : "") +
       (S.canWrite ? '<p class="sm faint mt-md">Tap a transaction to change its category.</p>' : "") + "</div>";
   }
@@ -1564,7 +1598,7 @@ code.secret { word-break: break-all; font-size: 12px; background: var(--bg-faint
     var head = pageHead("Wealth balance sheet", esc(S.household.household) + ", " + esc(new Date().toLocaleDateString("en-GB", { month: "long", year: "numeric" })),
       seg + (S.canWrite ? '<button class="btn btn-primary" data-action="witem">' + icon("plus") + "Add</button>" : ""));
     var items = wVisible(), t = wTotals(items);
-    var html = head + wKpis(t) + wTabs();
+    var html = head + wKpis(t) + wUpdateStrip(items) + wTabs();
     if (S.wealthTab === "overview") html += wOverview(items, t);
     else if (S.wealthTab === "investments") html += wInvestments(items);
     else if (S.wealthTab === "assets") html += wAssets(items);
@@ -1592,6 +1626,15 @@ code.secret { word-break: break-all; font-size: 12px; background: var(--bg-faint
       '<div class="card"><div class="kpi-head"><span class="muted">Total assets</span>' + icon("up", "pos") + '</div><p class="big">' + gbp(t.assets) + "</p>" + since(t.assets, prev && prev.assets, "asset", "Property, investments and cash") + "</div>" +
       '<div class="card"><div class="kpi-head"><span class="muted">Total liabilities</span>' + icon("down", "faint") + '</div><p class="big">' + gbp(t.liabs) + "</p>" + since(t.liabs, prev && prev.liabs, "liab", "Mortgage, loans and cards") + "</div>" +
       '<div class="card"><div class="kpi-head"><span class="muted">Net worth</span>' + badge + '</div><p class="big brand">' + (t.net < 0 ? "−" : "") + gbp(t.net) + "</p>" + since(t.net, prev && prev.net, "asset", "Assets minus liabilities") + "</div></div>";
+  }
+  // This month's update: how many figures are in, and a way to step through the rest
+  function wUpdateStrip(items) {
+    if (!items.length) return "";
+    var left = items.filter(function (i) { return !doneThisMonth(i); }).length, done = items.length - left, mn = monthName(monthKey());
+    if (!left) return '<div class="upd-strip done">' + icon("checkcircle") + "<p><strong>All updated for " + esc(mn) + ".</strong> Every figure here is this month's.</p></div>";
+    var label = !done ? "Start the " + mn + " update" : left === 1 ? "Update the last one" : "Update the other " + left;
+    return '<div class="upd-strip"><div class="upd-text"><p><strong>' + esc(mn) + " update:</strong> " + done + " of " + items.length + " done</p>" + bar(done / items.length * 100, "ok") + "</div>" +
+      (S.canWrite ? '<button type="button" class="btn btn-primary" data-action="upd-start">' + esc(label) + "</button>" : "") + "</div>";
   }
   function wTabs() {
     var tabs = [["overview", "Overview"], ["investments", "Investments"], ["assets", "Assets"], ["liabilities", "Liabilities"]];
@@ -1646,11 +1689,12 @@ code.secret { word-break: break-all; font-size: 12px; background: var(--bg-faint
     out.push(snapFromValues(cur, live));
     return out;
   }
-  function wbCell(v, prev, side, now) {
+  function wbCell(v, prev, side, now, stale) {
     var td = "<td" + (now ? ' class="now"' : "") + ">";
     if (v == null) return td + '<span class="faint">—</span></td>';
     var d = "";
-    if (prev != null) {
+    if (stale) d = '<span class="d upd-not">Not updated yet</span>';
+    else if (prev != null) {
       var diff = v - prev, good = side === "liab" ? diff < 0 : diff > 0;
       d = Math.abs(diff) < 1 ? '<span class="d faint">No change</span>' : '<span class="d ' + (good ? "pos" : "neg") + '">' + signed(diff) + "</span>";
     }
@@ -1659,10 +1703,10 @@ code.secret { word-break: break-all; font-size: 12px; background: var(--bg-faint
   function wMonthly() {
     var all = wbSnapshots(), range = S.wbRange || 6, snaps = all.slice(-range), items = wVisible(), open = S.wbOpen || {}, gaps = false;
     var last = snaps[snaps.length - 1], prev = snaps.length > 1 ? snaps[snaps.length - 2] : null;
-    function line(cls, first, get, side) {
+    function line(cls, first, get, side, stale) {
       return "<tr" + (cls ? ' class="' + cls + '"' : "") + "><th scope=\"row\">" + first + "</th>" + snaps.map(function (s, k) {
         var v = get(s); if (v == null) gaps = true;
-        return wbCell(v, k ? get(snaps[k - 1]) : null, side, s === last);
+        return wbCell(v, k ? get(snaps[k - 1]) : null, side, s === last, s === last && stale);
       }).join("") + "</tr>";
     }
     function itemVal(id) { return function (s) { return s.items ? (s.items[id] != null ? Number(s.items[id]) || 0 : null) : null; }; }
@@ -1673,10 +1717,10 @@ code.secret { word-break: break-all; font-size: 12px; background: var(--bg-faint
       var first = list.length
         ? '<button type="button" class="wb-tog" data-wbx="' + key + '" aria-expanded="' + isOpen + '">' + icon("chev") + dot + "<span>" + esc(label) + "</span></button>"
         : '<span class="wb-tog">' + '<span class="wb-sp"></span>' + dot + "<span>" + esc(label) + "</span></span>";
-      var html = line("", first, total, side);
+      var html = line("", first, total, side, list.length && !list.some(doneThisMonth));
       if (!isOpen) return html;
       list.forEach(function (i) {
-        html += line("it", "<span>" + esc(i.name) + '</span><span class="wb-sub">' + esc([i.provider, S.wealthFilter === "all" ? ownerShort(i) : ""].filter(Boolean).join(", ")) + "</span>", itemVal(i.id), side);
+        html += line("it", "<span>" + esc(i.name) + '</span><span class="wb-sub">' + esc([i.provider, S.wealthFilter === "all" ? ownerShort(i) : ""].filter(Boolean).join(", ")) + "</span>", itemVal(i.id), side, !doneThisMonth(i));
       });
       if (S.wealthFilter === "all") {
         // Totals include things you've since deleted, so show what's left over as its own line
@@ -1723,23 +1767,32 @@ code.secret { word-break: break-all; font-size: 12px; background: var(--bg-faint
     return '<div class="card"><div class="wb-head"><div><h2>Month by month</h2><p class="sm muted mt-xs">What you own and owe each month you updated your figures, and how each line changed</p></div>' + summary + "</div>" +
       (ranges ? '<div class="mb-md">' + ranges + "</div>" : "") + (snaps.length > 2 ? '<p class="sm faint wb-hint">Swipe the table sideways to see earlier months</p>' : "") + table + (note ? '<p class="sm muted mt-md">' + note + "</p>" : "") + "</div>";
   }
+  // The change since last month's figure, so rows agree with the month-by-month table
   function changeLine(i) {
-    if (i.prevValue == null || i.prevValue === i.value) return "";
-    var d = i.value - i.prevValue, good = GROUPS[i.group].side === "asset" ? d >= 0 : d <= 0;
-    return '<span class="chg sm mt-xs ' + (good ? "pos" : "neg") + '">' + icon(d >= 0 ? "up" : "down") + signed(d) + " since " + esc(shortDate(i.prevAt)) + "</span>";
+    var last = lastRecorded(i); if (!last || !doneThisMonth(i)) return "";
+    var d = (Number(i.value) || 0) - last.v, good = GROUPS[i.group].side === "asset" ? d >= 0 : d <= 0;
+    if (Math.abs(d) < 1) return '<span class="chg sm mt-xs faint">No change</span>';
+    return '<span class="chg sm mt-xs ' + (good ? "pos" : "neg") + '">' + icon(d >= 0 ? "up" : "down") + signed(d) + " since " + esc(monthName(last.m)) + "</span>";
   }
+  // Whether this month's figure is in yet
+  function statusLine(i) {
+    return doneThisMonth(i)
+      ? '<p class="sm faint upd-done">' + icon("check") + "Updated " + esc(shortDate(checkedAt(i))) + "</p>"
+      : '<p><span class="badge warning upd-chip">Needs ' + esc(monthName(monthKey())) + " update</span></p>";
+  }
+  function rowChev() { return S.canWrite ? '<span class="go">' + icon("chev") + "</span>" : ""; }
   function subLine(i) {
     var bits = []; if (i.group === "isa") bits.push(ISA_TYPES[i.isaType] || "ISA"); if (i.provider) bits.push(i.provider); if (i.group === "pension" && i.pmonthly) bits.push(gbp(i.pmonthly) + " a month going in"); if (i.group === "credit" && i.due) bits.push("due on the " + ordinal(+i.due));
     return '<p class="sm muted">' + esc(bits.join(", ")) + (S.wealthFilter === "all" ? '<span class="owner-chip">' + esc(ownerShort(i)) + "</span>" : "") + "</p>";
   }
   function assetRow(i) {
-    return '<button type="button" class="item-row" data-witem="' + esc(i.id) + '"' + (S.canWrite ? ' aria-label="Edit ' + esc(i.name) + '"' : " disabled") + '><div style="min-width:0"><p>' + esc(i.name) + "</p>" + subLine(i) + '</div><div class="r"><p class="num" style="font-weight:600">' + gbp(i.value) + "</p>" + changeLine(i) + "</div></button>";
+    return '<button type="button" class="item-row" data-witem="' + esc(i.id) + '"' + (S.canWrite ? ' aria-label="Edit ' + esc(i.name) + '"' : " disabled") + '><div style="min-width:0;flex:1"><p>' + esc(i.name) + "</p>" + subLine(i) + statusLine(i) + '</div><div class="r"><p class="num" style="font-weight:600">' + gbp(i.value) + "</p>" + changeLine(i) + "</div>" + rowChev() + "</button>";
   }
   function liabRow(i) {
     var facts = "";
     if (i.group === "mortgage" || i.group === "loan") facts = '<div class="facts"><div class="tile"><p class="sm muted">Rate</p><p class="num" style="font-weight:600">' + (i.rate != null && i.rate !== "" ? esc(i.rate) + "%" : "—") + '</p></div><div class="tile"><p class="sm muted">Monthly</p><p class="num" style="font-weight:600">' + (i.monthly ? gbp(i.monthly) : "—") + '</p></div><div class="tile"><p class="sm muted">Remaining</p><p style="font-weight:600">' + esc(remainingText(i.end)) + "</p></div></div>";
     else if (i.group === "credit" && i.limit) { var u = Math.round(i.value / i.limit * 100); facts = '<div style="width:100%;margin-top:10px"><div class="row-between mb-xs"><span class="sm muted">' + u + "% of " + gbp(i.limit) + " limit used</span></div>" + bar(u, u > 50 ? "warn" : "") + "</div>"; }
-    return '<button type="button" class="item-row liab" data-witem="' + esc(i.id) + '"' + (S.canWrite ? ' aria-label="Edit ' + esc(i.name) + '"' : " disabled") + '><div class="row-between" style="align-items:flex-start"><div style="min-width:0"><p>' + esc(i.name) + "</p>" + subLine(i) + '</div><div class="r"><p class="num" style="font-weight:600">' + gbp(i.value) + "</p>" + changeLine(i) + "</div></div>" + facts + "</button>";
+    return '<button type="button" class="item-row liab" data-witem="' + esc(i.id) + '"' + (S.canWrite ? ' aria-label="Edit ' + esc(i.name) + '"' : " disabled") + '><div class="row-between" style="align-items:flex-start"><div style="min-width:0;flex:1"><p>' + esc(i.name) + "</p>" + subLine(i) + statusLine(i) + '</div><div class="r"><p class="num" style="font-weight:600">' + gbp(i.value) + "</p>" + changeLine(i) + "</div>" + rowChev() + "</div>" + facts + "</button>";
   }
   function wSection(items, g) {
     var list = byGroup(items, g), G = GROUPS[g];
@@ -1812,6 +1865,7 @@ code.secret { word-break: break-all; font-size: 12px; background: var(--bg-faint
   // ══ Generic form dialog ═════════════════════════════════════════════════
   var gDlg = el("genDlg"), gForm = el("genForm"), gBody = el("genBody"), gDel = el("genDelete"), gCur = null;
   function openForm(cfg) {
+    if (gDlg.open) gDlg.close();
     gCur = cfg;
     el("genTitle").textContent = cfg.title;
     gBody.innerHTML = cfg.fields.map(function (f) {
@@ -1829,6 +1883,7 @@ code.secret { word-break: break-all; font-size: 12px; background: var(--bg-faint
     }).join("");
     gDel.hidden = !cfg.onDelete; gDel.classList.remove("armed"); gDel.textContent = cfg.deleteLabel || "Delete";
     el("genSave").textContent = cfg.saveLabel || "Save";
+    el("genSave").classList.toggle("btn-primary", !cfg.danger); el("genSave").classList.toggle("btn-destroy", !!cfg.danger);
     gDlg.showModal();
     var first = gBody.querySelector("input:not([type=checkbox]), select"); if (first) setTimeout(function () { first.focus(); }, 0);
   }
@@ -1922,19 +1977,43 @@ code.secret { word-break: break-all; font-size: 12px; background: var(--bg-faint
         { name: "p2", label: "Second person", value: S.household.p2 },
         { type: "html", html: '<div class="tile"><h3 class="mb-xs">What gets saved</h3><p class="sm muted">' + PRIVACY_NOTE + '</p></div>' +
           '<div class="tile"><h3 class="mb-xs">Backup</h3><p class="sm muted mb-md">Download everything as one file to keep safe' + (restoreBackup ? ", or restore from one." : ". You\'ll also use it to move to your own hosting.") + '</p><div class="head-actions"><button type="button" class="btn btn-neutral" data-backup="download">' + icon("arrowdown") + 'Download a backup</button>' +
-          (restoreBackup && S.canWrite ? '<button type="button" class="btn btn-neutral" data-backup="restore">' + icon("upload") + 'Restore from a backup</button><input type="file" id="restoreFile" accept=".json,application/json" hidden>' : "") +
-          (signOut ? '<button type="button" class="btn btn-neutral" data-backup="signout">Sign out</button>' : "") + "</div>" +
-          (S.canWrite ? '<div class="danger-zone mt-md"><button type="button" class="btn btn-danger" data-backup="wipe">Delete everything</button><p class="sm muted mt-xs">Removes all figures, transactions and settings for both of you. Download a backup first if you might want them.</p></div>' : "") + "</div>" }
+          (restoreBackup && S.canWrite ? '<button type="button" class="btn btn-neutral" data-backup="restore">' + icon("upload") + 'Restore from a backup</button><input type="file" id="restoreFile" accept=".json,application/json" hidden>' : "") + "</div></div>" +
+          (signOut ? '<div class="tile row-between" style="gap:12px"><div><h3 class="mb-xs">Sign out</h3><p class="sm muted">The app also signs you out by itself after ' + IDLE_MINUTES + ' minutes without use.</p></div><button type="button" class="btn btn-neutral" data-backup="signout">Sign out</button></div>' : "") +
+          // Deletes live apart from everything else, and each opens its own window to confirm
+          (S.canWrite ? '<div class="tile danger-zone"><h3 class="mb-xs">Danger zone</h3><p class="sm muted mb-md">These can\'t be undone, and they delete things for both of you.</p><div class="head-actions">' +
+            (nTx ? '<button type="button" class="btn btn-danger" data-backup="wipe-tx">Delete all transactions…</button>' : "") +
+            '<button type="button" class="btn btn-danger" data-backup="wipe">Delete everything…</button></div></div>' : "") }
       ],
       saveLabel: "Save",
       onSave: function () {
         if (!S.canWrite) return;
         var h = { household: gv("household").trim() || "Our household", p1: gv("p1").trim() || "Person 1", p2: gv("p2").trim() || "Person 2" };
         S.household = h; saveMeta("household", h);
-      },
-      onDelete: S.canWrite && nTx ? function () { vals(S.txdocs).forEach(function (d) { delDoc("tx", d.id); }); } : null,
-      deleteLabel: "Delete all transactions", confirmLabel: "Delete all " + nTx.toLocaleString("en-GB") + " for both of you"
+      }
     });
+  }
+  // Big deletes: their own window, a backup offered first, and the word DELETE typed to confirm
+  function confirmWipe(all) {
+    var n = allTx().length;
+    openForm({
+      title: all ? "Delete everything?" : "Delete all transactions?",
+      fields: [
+        { type: "html", html: "<p>" + (all ? "This removes every figure, transaction, goal, to-do and setting, for both of you." : "This removes all " + n.toLocaleString("en-GB") + " transactions from every account, for both of you. Your accounts, Wealth figures and settings stay.") + " It can\'t be undone.</p>" +
+          '<div class="tile"><p class="sm muted mb-md">The app only keeps a backup if you download one.</p><button type="button" class="btn btn-neutral" data-backup="download">' + icon("arrowdown") + "Download a backup first</button></div>" },
+        { name: "confirm", label: "Type DELETE to confirm" }
+      ],
+      saveLabel: all ? "Delete everything" : "Delete " + n.toLocaleString("en-GB") + " transactions", danger: true,
+      onSave: function () {
+        if (!S.canWrite) return;
+        if (gv("confirm").trim().toUpperCase() !== "DELETE") { gErr("confirm", "Type the word DELETE to confirm."); return false; }
+        if (all) wipeAll(); else vals(S.txdocs).forEach(function (d) { delDoc("tx", d.id); });
+      }
+    });
+  }
+  function wipeAll() {
+    ["items", "accounts", "tx", "goals", "todos", "costs"].forEach(function (coll) { Object.keys(S[STORE[coll]]).forEach(function (id) { delDoc(coll, id); }); });
+    ["household", "history", "rules", "bills", "budgets", "tags"].forEach(function (m) { if (db) write(function () { return db.doc("meta/" + m).delete(); }); });
+    S.history = { points: {} }; S.rules = {}; S.budgets = {}; S.billsIgnore = []; S.tags = null; S.todoTag = ""; S.household = { household: "Our household", p1: "Person 1", p2: "Person 2" }; S.chat.turns = [];
   }
 
   // ══ Backup ═════════════════════════════════════════════════════════════
@@ -1962,13 +2041,7 @@ code.secret { word-break: break-all; font-size: 12px; background: var(--bg-faint
     var a = b.getAttribute("data-backup");
     if (a === "download") downloadBackup();
     else if (a === "signout" && signOut) signOut();
-    else if (a === "wipe" && S.canWrite) {
-      if (!b.classList.contains("armed")) { b.classList.add("armed"); b.textContent = "Click again to delete everything for both of you"; return; }
-      ["items", "accounts", "tx", "goals", "todos", "costs"].forEach(function (coll) { Object.keys(S[STORE[coll]]).forEach(function (id) { delDoc(coll, id); }); });
-      ["household", "history", "rules", "bills", "budgets", "tags"].forEach(function (m) { if (db) write(function () { return db.doc("meta/" + m).delete(); }); });
-      S.history = { points: {} }; S.rules = {}; S.budgets = {}; S.billsIgnore = []; S.tags = null; S.todoTag = ""; S.household = { household: "Our household", p1: "Person 1", p2: "Person 2" }; S.chat.turns = [];
-      gDlg.close(); render();
-    }
+    else if ((a === "wipe" || a === "wipe-tx") && S.canWrite) confirmWipe(a === "wipe");
     else if (a === "restore" && restoreBackup) { var f = el("restoreFile"); f.onchange = function () { if (f.files[0]) restoreBackup(f.files[0]); }; f.click(); }
   });
 
@@ -1995,6 +2068,9 @@ code.secret { word-break: break-all; font-size: 12px; background: var(--bg-faint
   // ── The monthly update: when editing, the value sits at the top with last month's figure for context
   var valueField = el("valueField"), valueTop = el("valueTop"), valueSlot = el("valueSlot"), VCTX = null;
   function monthOf(iso) { var d = new Date(iso || ""); return isNaN(d) ? null : monthKey(d); }
+  // checkedAt is when this month's figure was confirmed: a new one typed in, or the old one kept
+  function checkedAt(it) { return it.checkedAt || it.valueAt || it.updatedAt || it.createdAt; }
+  function doneThisMonth(it) { return monthOf(checkedAt(it)) === monthKey(); }
   function money(v) { v = Number(v) || 0; return gbp(v, Math.round(v * 100) % 100 ? 2 : 0); }
   // The latest figure from an earlier month: the monthly history first, then the item's own dates
   function lastRecorded(it) {
@@ -2023,18 +2099,35 @@ code.secret { word-break: break-all; font-size: 12px; background: var(--bg-faint
       VCTX = null; valueTop.hidden = true; el("detailsHead").hidden = true; valueSlot.parentNode.insertBefore(valueField, valueSlot);
       el("f-value").placeholder = ""; hint.hidden = true; return;
     }
-    var cur = monthKey(), last = lastRecorded(it), mine = monthOf(it.valueAt || it.updatedAt) === cur;
-    valueTop.hidden = false; el("detailsHead").hidden = false; valueTop.appendChild(valueField);
+    var cur = monthKey(), last = lastRecorded(it), mine = doneThisMonth(it);
+    valueTop.hidden = false; el("detailsHead").hidden = false; valueTop.insertBefore(valueField, el("valueKeep"));
     el("valueMonth").textContent = "Update for " + monthName(cur);
     var vl = GROUPS[it.group].valueLabel; el("l-value").textContent = vl === "Current value" ? "New value" : "New " + vl.charAt(0).toLowerCase() + vl.slice(1);
     el("f-value").placeholder = (Number(it.value) || 0).toLocaleString("en-GB");
     hint.textContent = mine
       ? "Already updated this month to " + money(it.value) + ". A new figure replaces it." + (last ? " " + monthName(last.m) + ": " + money(last.v) + "." : "")
-      : (last ? monthName(last.m) + ": " + money(last.v) + ". " : "") + "Leave blank to keep it as it is.";
+      : (last ? monthName(last.m) + ": " + money(last.v) + ". " : "") + "Leave blank if you're only changing the details.";
     hint.hidden = false;
+    // Nothing changed? One tap keeps the figure and counts as this month's update
+    el("valueKeep").hidden = mine; el("keepBtn").textContent = "Keep " + money(it.value);
+    el("keepNote").textContent = last && Math.abs((Number(it.value) || 0) - last.v) < 0.005 ? "if it's the same as " + monthName(last.m) : "if it hasn't changed";
     VCTX = { side: GROUPS[it.group].side, base: last ? last.v : Number(it.value) || 0, label: last ? monthName(last.m) : "the last update" };
   }
-  function openItem(id, group) {
+  // Step through everything still to update this month, biggest first within each type
+  function startUpdate() {
+    var order = Object.keys(GROUPS);
+    var ids = wVisible().filter(function (i) { return !doneThisMonth(i); }).sort(function (a, b) { return order.indexOf(a.group) - order.indexOf(b.group) || (b.value || 0) - (a.value || 0); }).map(function (i) { return i.id; });
+    if (!ids.length) return;
+    S.upd = { ids: ids, pos: 0 }; openItem(ids[0], null, true);
+  }
+  function nextUpdate() {
+    if (!S.upd) return;
+    do S.upd.pos++; while (S.upd.pos < S.upd.ids.length && !S.items[S.upd.ids[S.upd.pos]]);
+    if (S.upd.pos >= S.upd.ids.length) { S.upd = null; return; }
+    openItem(S.upd.ids[S.upd.pos], null, true);
+  }
+  function openItem(id, group, step) {
+    if (!step) S.upd = null;
     var it = id ? S.items[id] : null; editingId = id || null;
     form.reset(); el("valueErr").hidden = true;
     fGroup.value = it ? it.group : (group || (S.wealthTab === "liabilities" ? "mortgage" : S.wealthTab === "investments" ? "isa" : "property"));
@@ -2046,12 +2139,19 @@ code.secret { word-break: break-all; font-size: 12px; background: var(--bg-faint
       el("f-monthly").value = it.monthly || ""; el("f-pmonthly").value = it.pmonthly || ""; el("f-end").value = it.end || ""; el("f-limit").value = it.limit || ""; el("f-due").value = it.due || "";
     } else if (S.wealthFilter !== "all") fOwner.value = S.wealthFilter === "joint" && fGroup.value === "isa" ? "p1" : S.wealthFilter;
     valueLayout(it);
+    var run = step && S.upd, more = run && S.upd.pos < S.upd.ids.length - 1;
+    el("valueStep").hidden = !run; if (run) el("stepCount").textContent = (S.upd.pos + 1) + " of " + S.upd.ids.length;
+    el("saveBtn").textContent = more ? "Save and next" : "Save";
     delBtn.hidden = !it; delBtn.classList.remove("armed"); delBtn.textContent = "Delete";
     dlg.showModal(); setTimeout(function () { el(it ? "f-value" : "f-name").focus(); }, 0);
   }
+  var KEEP = false;
+  el("keepBtn").addEventListener("click", function () { KEEP = true; if (form.requestSubmit) form.requestSubmit(); else form.dispatchEvent(new Event("submit", { cancelable: true })); });
+  el("skipBtn").addEventListener("click", function () { dlg.close(); nextUpdate(); });
   form.addEventListener("submit", function (e) {
     e.preventDefault();
-    var g = fGroup.value, name = el("f-name").value.trim(), raw = el("f-value").value.trim(), value = parseMoney(raw);
+    var keep = KEEP; KEEP = false;
+    var g = fGroup.value, name = el("f-name").value.trim(), raw = keep ? "" : el("f-value").value.trim(), value = parseMoney(raw);
     var prev = editingId ? S.items[editingId] : null, id = prev ? prev.id : newId("i"), now = new Date().toISOString();
     if (prev && !raw) value = Number(prev.value) || 0; // left blank: keep the current figure
     if (!name) { el("f-name").focus(); return; }
@@ -2059,6 +2159,7 @@ code.secret { word-break: break-all; font-size: 12px; background: var(--bg-faint
     var same = prev && prev.value === value;
     // valueAt is when the figure itself last changed, so editing other details doesn't move it
     var it = { group: g, name: name, provider: el("f-provider").value.trim(), value: value, owner: fOwner.value || "joint", valueAt: same ? (prev.valueAt || prev.updatedAt || prev.createdAt || now) : now, updatedAt: now, updatedBy: myId || null, createdAt: prev ? prev.createdAt : now };
+    if (raw || keep || !prev) it.checkedAt = now; else if (prev.checkedAt) it.checkedAt = prev.checkedAt;
     if (prev && !same) { it.prevValue = prev.value; it.prevAt = prev.valueAt || prev.updatedAt || prev.createdAt; }
     else if (prev && prev.prevValue != null) { it.prevValue = prev.prevValue; it.prevAt = prev.prevAt; }
     if (g === "isa") { it.isaType = fIsa.value; var c = parseMoney(el("f-contrib").value); it.contrib = c && !isNaN(c) ? c : 0; it.contribYear = taxYear().label; if (it.isaType === "jisa") { it.child = el("f-child").value.trim() || "Child"; it.owner = "joint"; } }
@@ -2066,6 +2167,7 @@ code.secret { word-break: break-all; font-size: 12px; background: var(--bg-faint
     if (g === "pension") { var pm = parseMoney(el("f-pmonthly").value); it.pmonthly = pm && !isNaN(pm) ? pm : null; }
     if (g === "credit") { var l = parseMoney(el("f-limit").value); it.limit = l && !isNaN(l) ? l : null; var d = parseInt(el("f-due").value, 10); it.due = d >= 1 && d <= 31 ? d : null; }
     dlg.close(); saveDoc("items", id, it); recordHistory(); render();
+    if (S.upd && S.upd.ids[S.upd.pos] === id) nextUpdate();
   });
   delBtn.addEventListener("click", function () {
     if (!delBtn.classList.contains("armed")) { delBtn.classList.add("armed"); delBtn.textContent = "Delete for both of you"; return; }
@@ -2539,6 +2641,7 @@ code.secret { word-break: break-all; font-size: 12px; background: var(--bg-faint
     if ((a = t.getAttribute("data-action")) !== null) {
       if (a === "settings") return openSettings();
       if (a === "health") return openHealth();
+      if (a === "tx-clear") { S.txq = { q: "", month: null, who: "all", cat: "all", acc: "all" }; return render(); }
       if (a === "model-reset") { var tb = S.model ? S.model.tab : "inv"; S.model = null; S.model0tab = tb; return render(); }
       if (!S.canWrite) return;
       if (a === "import") return openImport();
@@ -2546,6 +2649,7 @@ code.secret { word-break: break-all; font-size: 12px; background: var(--bg-faint
       if (a === "addtx") return openAddTx();
       if (a === "goal") return openGoal(null);
       if (a === "witem") return openItem(null, t.getAttribute("data-group"));
+      if (a === "upd-start") return startUpdate();
       if (a === "todo-tags") return openTags();
       return;
     }
@@ -2567,7 +2671,7 @@ code.secret { word-break: break-all; font-size: 12px; background: var(--bg-faint
     if ((a = t.getAttribute("data-wbx")) !== null) { S.wbOpen = S.wbOpen || {}; S.wbOpen[a] = !S.wbOpen[a]; return render(); }
     if ((a = t.getAttribute("data-wbrange")) !== null) { S.wbRange = +a === 12 ? 12 : 6; return render(); }
     if ((a = t.getAttribute("data-fam")) !== null) { S.famTab = a; render(); return window.scrollTo(0, 0); }
-    if ((a = t.getAttribute("data-go-tx")) !== null) { S.txq = { q: "", month: currentMonth(), who: a || "all", cat: "all", acc: "all" }; return go("transactions"); }
+    if ((a = t.getAttribute("data-go-tx")) !== null) { S.txq = { q: "", month: null, who: a || "all", cat: "all", acc: "all" }; return go("transactions"); }
     if ((a = t.getAttribute("data-pick-month")) !== null) { S.month = a; return render(); }
     if ((a = t.getAttribute("data-todo-del")) !== null) { delDoc("todos", a); return render(); }
     if ((a = t.getAttribute("data-todo-filter")) !== null) { S.todoTag = S.todoTag === a ? "" : a; S.todoAddTag = ""; return render(); }
@@ -2601,7 +2705,12 @@ code.secret { word-break: break-all; font-size: 12px; background: var(--bg-faint
       if (t.value === "__new") { render(); return openNewTag(function (id) { S.todoAddTag = id; }); }
       S.todoAddTag = t.value; return render();
     }
-    if (t.hasAttribute("data-txq") && t.tagName === "SELECT") { S.txq[t.getAttribute("data-txq")] = t.value; render(); }
+    if (t.hasAttribute("data-txq") && t.tagName === "SELECT") {
+      // Picking a month moves every page to it; "All months" only applies here
+      if (t.getAttribute("data-txq") === "month") { if (t.value) { S.month = t.value; S.txq.month = null; } else S.txq.month = ""; }
+      else S.txq[t.getAttribute("data-txq")] = t.value;
+      render();
+    }
   });
   var searchTimer;
   document.addEventListener("input", function (e) {
@@ -2738,7 +2847,9 @@ code.secret { word-break: break-all; font-size: 12px; background: var(--bg-faint
       w9: { group: "credit", name: "Amex", provider: "American Express", value: 2140, owner: "p2", limit: 5000, due: 22 },
       w10: { group: "loan", name: "Car finance", provider: "Black Horse", value: 7800, owner: "joint", rate: 6.9, monthly: 289, end: "2028-06" }
     };
-    Object.keys(items).forEach(function (k) { items[k].id = k; items[k].createdAt = now.toISOString(); items[k].updatedAt = now.toISOString(); });
+    // A few figures are already in for this month; the rest still need this month's update
+    var fresh = { w2: 1, w3: 1, w8: 1, w9: 1 }, inThisMonth = new Date(now.getFullYear(), now.getMonth(), Math.max(1, today - 2), 9).toISOString(), endLastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 28, 9).toISOString();
+    Object.keys(items).forEach(function (k) { var at = fresh[k] ? inThisMonth : endLastMonth; items[k].id = k; items[k].createdAt = new Date(now.getFullYear(), now.getMonth() - 6, 1).toISOString(); items[k].updatedAt = at; items[k].valueAt = at; items[k].checkedAt = at; });
     items.w3.prevValue = 37620; items.w3.prevAt = new Date(now.getFullYear(), now.getMonth() - 1, 12).toISOString();
     items.w2.prevValue = 312950; items.w2.prevAt = items.w3.prevAt;
     S.items = items;
@@ -2747,7 +2858,7 @@ code.secret { word-break: break-all; font-size: 12px; background: var(--bg-faint
     months.forEach(function (m, i) {
       var back = 5 - i, list = [], iv = {}, lg = {};
       Object.keys(items).forEach(function (k) {
-        var v = items[k].value - back * monthly[k];
+        var v = items[k].value - (fresh[k] ? back : Math.max(0, back - 1)) * monthly[k];
         if (k === "w5" && i === 3) v -= 300;
         if (k === "w8" && i === 1) v += 500;
         if (k === "w9") v += i % 2 ? 180 : -90;
