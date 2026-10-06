@@ -420,10 +420,7 @@ dialog.wide { width: min(640px, calc(100vw - 24px)); }
 
 .hero-title { background: none; border: 0; padding: 0; color: #fff; cursor: pointer; display: inline-flex; align-items: center; gap: 4px; font-size: 13px; text-align: left; }
 .hero-title:hover { color: #fff; }
-/* Home: the health chip on the pink card, Needs attention, and the two doors */
-.health-chip { display: inline-flex; align-items: center; gap: 8px; margin-top: 20px; padding: 10px 14px; min-height: 44px; border: 0; border-radius: 999px; background: rgba(255,255,255,0.14); color: #fff; font: inherit; font-size: 14px; text-align: left; cursor: pointer; }
-.health-chip:hover { background: rgba(255,255,255,0.22); }
-.health-chip b { font-weight: 600; }
+/* Home: Needs attention, and the two doors */
 .need-row > .ico:last-child, .door .ico { color: var(--text-tertiary); flex-shrink: 0; }
 .need-row .main p:first-child { white-space: normal; }
 .all-clear { display: flex; align-items: center; gap: 10px; color: var(--success-text); }
@@ -962,13 +959,8 @@ code.secret { word-break: break-all; font-size: 12px; background: var(--bg-faint
     var change = prevAll.length ? st.net - prev.net : null;
     var hero = '<div class="hero"><div class="row-between mb-md"><button type="button" class="hero-title" data-go-tx="" data-sp-tab="overview" title="See this month\'s spending">Net cashflow' + (soFar ? " so far" : "") + ", " + esc(monthLabel(m, "long")) + " " + icon("chev") + "</button>" +
       (change != null ? '<span class="badge" title="' + (soFar ? "Compared with the first " + day + " days of " + esc(monthName(pm)) : "Compared with " + esc(monthName(pm))) + '">' + (change >= 0 ? "↑ " : "↓ ") + gbp(change) + (soFar ? " vs this time in " : " vs ") + esc(monthLabel(pm)) + "</span>" : "") + "</div>" +
-      '<p class="big num">' + signed(st.net) + '</p><p class="sm mt-xs">Money in ' + gbp(st.inc) + ", money out " + gbp(st.out) + "</p>" + heroSpark(txs, m) + healthChip(m, txs) + "</div>";
+      '<p class="big num">' + signed(st.net) + '</p><p class="sm mt-xs">Money in ' + gbp(st.inc) + ", money out " + gbp(st.out) + "</p>" + heroSpark(txs, m) + healthBlock(m, txs, true) + "</div>";
     return head + '<div class="grid g2" style="margin-bottom:24px">' + hero + needsCard() + '</div><div class="doors">' + spendDoor(txs, m) + wealthDoor() + "</div>";
-  }
-  // A small button on the pink card: the health label and score, opening Plan's Health tab
-  function healthChip(m, txs) {
-    var hl = health(m, txs), ok = hl.checks.length >= 2;
-    return '<button type="button" class="health-chip" data-open="plan-health">' + icon("sparkle") + "<span>Financial health: <b>" + (ok ? esc(healthLabel(hl.score)) + "</b>, " + Math.round(hl.score) + "/100" : "not enough figures yet</b>") + "</span>" + icon("chev") + "</button>";
   }
   // What needs one of you now. Each row opens the place to deal with it.
   function needRow(ic, title, sub, attrs, warn) {
@@ -1601,12 +1593,14 @@ code.secret { word-break: break-all; font-size: 12px; background: var(--bg-faint
       '<div class="g-lbl"><span class="g-num">' + score + '</span><span class="sm">/ 100</span></div></div>';
   }
   function stepAdded(title) { return vals(S.todos).some(function (t) { return t.label === title; }); }
-  function healthBlock(m, txs) {
+  // The circular health score. On Home its link opens Plan's Health tab (where the steps are listed);
+  // on Plan it explains how the score is worked out.
+  function healthBlock(m, txs, onHome) {
     var hl = health(m, txs);
     if (hl.checks.length < 2) {
       return '<div class="ring-wrap"><div><p style="font-weight:600">Financial health</p><p class="sm mt-xs">Add a few months of statements and your balance sheet on the Wealth page, and a health score appears here, checked against UK rules of thumb.</p></div></div>';
     }
-    return '<div class="ring-wrap">' + gaugeSvg(hl.score, 120) + '<div><p class="sm">' + icon("sparkle") + ' Financial health</p><p style="font-weight:600;font-size:17px" class="mt-xs">' + healthLabel(hl.score) + '</p><p class="sm mt-xs">' + hl.checks.length + " checks, " + (hl.months > 1 ? "averaged over " + hl.months + " full months" : hl.partial ? "from this month so far" : "from one month") + '.</p><button class="link hero-link mt-xs" data-action="health">How it\'s worked out</button></div></div>';
+    return '<div class="ring-wrap">' + gaugeSvg(hl.score, 120) + '<div><p class="sm">' + icon("sparkle") + ' Financial health</p><p style="font-weight:600;font-size:17px" class="mt-xs">' + healthLabel(hl.score) + '</p><p class="sm mt-xs">' + hl.checks.length + " checks, " + (hl.months > 1 ? "averaged over " + hl.months + " full months" : hl.partial ? "from this month so far" : "from one month") + '.</p>' + (onHome ? '<button class="link hero-link mt-xs" data-open="plan-health">See what to improve</button>' : '<button class="link hero-link mt-xs" data-action="health">How it\'s worked out</button>') + "</div></div>";
   }
   function openHealth() {
     var m = currentMonth(), hl = health(m, allTx());
