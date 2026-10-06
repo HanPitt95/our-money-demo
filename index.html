@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Our money (demo)</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 512 512%22%3E %3Cdefs%3E %3ClinearGradient id=%22bg%22 x1=%220%22 y1=%220%22 x2=%221%22 y2=%221%22%3E %3Cstop offset=%220%22 stop-color=%22%23c0126f%22/%3E %3Cstop offset=%221%22 stop-color=%22%23d0306a%22/%3E %3C/linearGradient%3E %3C/defs%3E %3Crect width=%22512%22 height=%22512%22 rx=%22112%22 fill=%22url%28%23bg%29%22/%3E %3Cg fill=%22%23f7a8cd%22%3E %3Cpath d=%22M256 160 C246 118 206 96 158 104 C166 150 208 172 256 160 Z%22/%3E %3Cpath d=%22M256 160 C266 118 306 96 354 104 C346 150 304 172 256 160 Z%22/%3E %3C/g%3E %3Cpath d=%22M256 158 V196%22 stroke=%22%23f7a8cd%22 stroke-width=%2212%22 stroke-linecap=%22round%22 fill=%22none%22/%3E %3Cpath d=%22M130 278 L256 186 L382 278%22 stroke=%22%23f9bd45%22 stroke-width=%2230%22 stroke-linecap=%22round%22 stroke-linejoin=%22round%22 fill=%22none%22/%3E %3Cpath d=%22M256 222 L340 284 V388 H172 V284 Z%22 fill=%22%23f9bd45%22 stroke=%22%23f9bd45%22 stroke-width=%2218%22 stroke-linejoin=%22round%22/%3E %3C/svg%3E" type="image/svg+xml">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wdth,wght@75..100,400..700&display=swap" rel="stylesheet">
@@ -466,12 +467,14 @@ pre.shared { white-space: pre-wrap; font-size: 12px; background: var(--bg-faint)
 code.secret { word-break: break-all; font-size: 12px; background: var(--bg-faint); padding: 2px 6px; border-radius: 6px; }
 /* Form fields need a visible edge, so empty boxes don't vanish */
 .field input, .field select, .add-row input, .filters input, .filters select, .cost-form input, .sl-num input, .chat-form textarea { border-color: var(--border-input); }
+/* The app icon (house and seedling) is the logo on the sign-in card and the sidebar */
+.rail img.mark, .auth-card img.mark { display: block; background: none; border-radius: 0; }
 </style>
 </head>
 <body>
 <div class="app">
   <nav class="rail" aria-label="Main">
-    <div class="mark" aria-hidden="true">£</div>
+    <img class="mark" src="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 512 512%22%3E %3Cdefs%3E %3ClinearGradient id=%22bg%22 x1=%220%22 y1=%220%22 x2=%221%22 y2=%221%22%3E %3Cstop offset=%220%22 stop-color=%22%23c0126f%22/%3E %3Cstop offset=%221%22 stop-color=%22%23d0306a%22/%3E %3C/linearGradient%3E %3C/defs%3E %3Crect width=%22512%22 height=%22512%22 rx=%22112%22 fill=%22url%28%23bg%29%22/%3E %3Cg fill=%22%23f7a8cd%22%3E %3Cpath d=%22M256 160 C246 118 206 96 158 104 C166 150 208 172 256 160 Z%22/%3E %3Cpath d=%22M256 160 C266 118 306 96 354 104 C346 150 304 172 256 160 Z%22/%3E %3C/g%3E %3Cpath d=%22M256 158 V196%22 stroke=%22%23f7a8cd%22 stroke-width=%2212%22 stroke-linecap=%22round%22 fill=%22none%22/%3E %3Cpath d=%22M130 278 L256 186 L382 278%22 stroke=%22%23f9bd45%22 stroke-width=%2230%22 stroke-linecap=%22round%22 stroke-linejoin=%22round%22 fill=%22none%22/%3E %3Cpath d=%22M256 222 L340 284 V388 H172 V284 Z%22 fill=%22%23f9bd45%22 stroke=%22%23f9bd45%22 stroke-width=%2218%22 stroke-linejoin=%22round%22/%3E %3C/svg%3E" alt="" width="36" height="36">
     <button class="rail-btn" data-page="home" aria-label="Home"><svg class="ico"><use href="#i-home"/></svg></button>
     <button class="rail-btn" data-page="transactions" aria-label="Spending"><svg class="ico"><use href="#i-list"/></svg></button>
     <button class="rail-btn" data-page="family" aria-label="Family accounts"><svg class="ico"><use href="#i-users"/></svg></button>
