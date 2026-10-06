@@ -225,6 +225,13 @@ dialog::backdrop { background: rgba(20, 5, 77, 0.35); }
 .money { position: relative; }
 .money::before { content: "£"; position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: var(--text-secondary); pointer-events: none; }
 .money input { padding-left: 26px; }
+/* Monthly value update at the top of the edit window */
+.value-top { background: var(--bg-faint); border-radius: var(--corner-md); padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; }
+.value-top h3 { font-size: 15px; }
+.value-top .money input { font-size: 18px; font-weight: 600; padding-top: 10px; padding-bottom: 10px; }
+.value-top .money input::placeholder { color: var(--text-tertiary); font-weight: 500; }
+.value-chg { font-weight: 600; }
+.details-head { font-size: 13px; color: var(--text-secondary); margin-top: 6px; }
 .two { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 .err { color: var(--danger-text); font-size: 12px; }
 [hidden] { display: none !important; }
@@ -472,6 +479,8 @@ code.secret { word-break: break-all; font-size: 12px; background: var(--bg-faint
       <button type="button" class="icon-btn" data-close aria-label="Close"><svg class="ico"><use href="#i-x"/></svg></button>
     </div>
     <div class="dlg-body">
+      <div class="value-top" id="valueTop" hidden><h3 id="valueMonth">Update</h3></div>
+      <h3 class="details-head" id="detailsHead" hidden>Details</h3>
       <div class="field"><label for="f-group">Type</label><select id="f-group"></select></div>
       <div class="field" data-for="isa">
         <label for="f-isaType">ISA type</label>
@@ -488,11 +497,14 @@ code.secret { word-break: break-all; font-size: 12px; background: var(--bg-faint
         <div class="field" id="ownerField"><label for="f-owner">Whose is it?</label><select id="f-owner"></select></div>
         <div class="field" id="childField" hidden><label for="f-child">Child's name</label><input id="f-child" autocomplete="off"></div>
       </div>
-      <div class="field">
+      <div class="field" id="valueField">
         <label for="f-value" id="l-value">Current value</label>
-        <div class="money"><input id="f-value" inputmode="decimal" autocomplete="off" required></div>
+        <div class="money"><input id="f-value" inputmode="decimal" autocomplete="off"></div>
+        <p class="hint" id="valueHint" hidden></p>
+        <p class="sm value-chg" id="valueChg" aria-live="polite" hidden></p>
         <p class="err" id="valueErr" hidden>Enter an amount, like 12500.</p>
       </div>
+      <div id="valueSlot" hidden></div>
       <div class="field" data-for="isa">
         <label for="f-contrib">Paid in this tax year</label>
         <div class="money"><input id="f-contrib" inputmode="decimal" autocomplete="off"></div>
@@ -1980,6 +1992,48 @@ code.secret { word-break: break-all; font-size: 12px; background: var(--bg-faint
     if (!editingId) el("itemTitle").textContent = "Add " + G.one;
   }
   fGroup.addEventListener("change", syncForm); fIsa.addEventListener("change", syncForm);
+  // ── The monthly update: when editing, the value sits at the top with last month's figure for context
+  var valueField = el("valueField"), valueTop = el("valueTop"), valueSlot = el("valueSlot"), VCTX = null;
+  function monthOf(iso) { var d = new Date(iso || ""); return isNaN(d) ? null : monthKey(d); }
+  function money(v) { v = Number(v) || 0; return gbp(v, Math.round(v * 100) % 100 ? 2 : 0); }
+  // The latest figure from an earlier month: the monthly history first, then the item's own dates
+  function lastRecorded(it) {
+    var cur = monthKey(), pts = S.history.points || {};
+    var keys = Object.keys(pts).filter(function (k) { return k < cur && pts[k] && pts[k].i && pts[k].i[it.id] != null; }).sort();
+    if (keys.length) { var k = keys[keys.length - 1]; return { m: k, v: Number(pts[k].i[it.id]) || 0 }; }
+    var am = monthOf(it.valueAt || it.updatedAt || it.createdAt);
+    if (am && am < cur) return { m: am, v: Number(it.value) || 0 };
+    var pm = monthOf(it.prevAt);
+    if (it.prevValue != null && pm && pm < cur) return { m: pm, v: Number(it.prevValue) || 0 };
+    return null;
+  }
+  function valueChange() {
+    var out = el("valueChg"), raw = el("f-value").value.trim(), v = raw ? parseMoney(raw) : null;
+    if (!VCTX || v == null || isNaN(v)) { out.hidden = true; return; }
+    var d = Math.round((v - VCTX.base) * 100) / 100, good = VCTX.side === "liab" ? d < 0 : d > 0;
+    out.hidden = false; out.className = "sm value-chg " + (Math.abs(d) < 0.005 ? "faint" : good ? "pos" : "neg");
+    out.textContent = (Math.abs(d) < 0.005 ? "No change" : signed(d, Math.round(Math.abs(d) * 100) % 100 ? 2 : 0)) + " since " + VCTX.label;
+  }
+  el("f-value").addEventListener("input", valueChange);
+  function valueLayout(it) {
+    var hint = el("valueHint");
+    el("valueChg").hidden = true; el("f-value").value = "";
+    if (!it) {
+      // Adding something new: the value stays in its usual place among the details
+      VCTX = null; valueTop.hidden = true; el("detailsHead").hidden = true; valueSlot.parentNode.insertBefore(valueField, valueSlot);
+      el("f-value").placeholder = ""; hint.hidden = true; return;
+    }
+    var cur = monthKey(), last = lastRecorded(it), mine = monthOf(it.valueAt || it.updatedAt) === cur;
+    valueTop.hidden = false; el("detailsHead").hidden = false; valueTop.appendChild(valueField);
+    el("valueMonth").textContent = "Update for " + monthName(cur);
+    var vl = GROUPS[it.group].valueLabel; el("l-value").textContent = vl === "Current value" ? "New value" : "New " + vl.charAt(0).toLowerCase() + vl.slice(1);
+    el("f-value").placeholder = (Number(it.value) || 0).toLocaleString("en-GB");
+    hint.textContent = mine
+      ? "Already updated this month to " + money(it.value) + ". A new figure replaces it." + (last ? " " + monthName(last.m) + ": " + money(last.v) + "." : "")
+      : (last ? monthName(last.m) + ": " + money(last.v) + ". " : "") + "Leave blank to keep it as it is.";
+    hint.hidden = false;
+    VCTX = { side: GROUPS[it.group].side, base: last ? last.v : Number(it.value) || 0, label: last ? monthName(last.m) : "the last update" };
+  }
   function openItem(id, group) {
     var it = id ? S.items[id] : null; editingId = id || null;
     form.reset(); el("valueErr").hidden = true;
@@ -1988,20 +2042,24 @@ code.secret { word-break: break-all; font-size: 12px; background: var(--bg-faint
     el("itemTitle").textContent = it ? "Edit " + it.name : "Add " + GROUPS[fGroup.value].one;
     if (it) {
       el("f-name").value = it.name || ""; el("f-provider").value = it.provider || ""; fOwner.value = it.owner || "joint"; el("f-child").value = it.child || "";
-      el("f-value").value = it.value != null ? it.value : ""; el("f-contrib").value = contribThisYear(it) || ""; el("f-rate").value = it.rate != null ? it.rate : "";
+      el("f-contrib").value = contribThisYear(it) || ""; el("f-rate").value = it.rate != null ? it.rate : "";
       el("f-monthly").value = it.monthly || ""; el("f-pmonthly").value = it.pmonthly || ""; el("f-end").value = it.end || ""; el("f-limit").value = it.limit || ""; el("f-due").value = it.due || "";
     } else if (S.wealthFilter !== "all") fOwner.value = S.wealthFilter === "joint" && fGroup.value === "isa" ? "p1" : S.wealthFilter;
+    valueLayout(it);
     delBtn.hidden = !it; delBtn.classList.remove("armed"); delBtn.textContent = "Delete";
-    dlg.showModal(); setTimeout(function () { el("f-name").focus(); }, 0);
+    dlg.showModal(); setTimeout(function () { el(it ? "f-value" : "f-name").focus(); }, 0);
   }
   form.addEventListener("submit", function (e) {
     e.preventDefault();
-    var g = fGroup.value, name = el("f-name").value.trim(), value = parseMoney(el("f-value").value);
+    var g = fGroup.value, name = el("f-name").value.trim(), raw = el("f-value").value.trim(), value = parseMoney(raw);
+    var prev = editingId ? S.items[editingId] : null, id = prev ? prev.id : newId("i"), now = new Date().toISOString();
+    if (prev && !raw) value = Number(prev.value) || 0; // left blank: keep the current figure
     if (!name) { el("f-name").focus(); return; }
     if (value == null || isNaN(value) || value < 0) { el("valueErr").hidden = false; el("f-value").focus(); return; }
-    var prev = editingId ? S.items[editingId] : null, id = prev ? prev.id : newId("i"), now = new Date().toISOString();
-    var it = { group: g, name: name, provider: el("f-provider").value.trim(), value: value, owner: fOwner.value || "joint", updatedAt: now, updatedBy: myId || null, createdAt: prev ? prev.createdAt : now };
-    if (prev && prev.value !== value) { it.prevValue = prev.value; it.prevAt = prev.updatedAt || prev.createdAt; }
+    var same = prev && prev.value === value;
+    // valueAt is when the figure itself last changed, so editing other details doesn't move it
+    var it = { group: g, name: name, provider: el("f-provider").value.trim(), value: value, owner: fOwner.value || "joint", valueAt: same ? (prev.valueAt || prev.updatedAt || prev.createdAt || now) : now, updatedAt: now, updatedBy: myId || null, createdAt: prev ? prev.createdAt : now };
+    if (prev && !same) { it.prevValue = prev.value; it.prevAt = prev.valueAt || prev.updatedAt || prev.createdAt; }
     else if (prev && prev.prevValue != null) { it.prevValue = prev.prevValue; it.prevAt = prev.prevAt; }
     if (g === "isa") { it.isaType = fIsa.value; var c = parseMoney(el("f-contrib").value); it.contrib = c && !isNaN(c) ? c : 0; it.contribYear = taxYear().label; if (it.isaType === "jisa") { it.child = el("f-child").value.trim() || "Child"; it.owner = "joint"; } }
     if (g === "mortgage" || g === "loan") { var r = parseMoney(el("f-rate").value); it.rate = r != null && !isNaN(r) ? r : null; var m = parseMoney(el("f-monthly").value); it.monthly = m && !isNaN(m) ? m : null; it.end = el("f-end").value || null; }
