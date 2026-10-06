@@ -1279,7 +1279,7 @@ code.secret { word-break: break-all; font-size: 12px; background: var(--bg-faint
       '<button type="button" class="tag-filter" data-todo-filter="" aria-pressed="' + !S.todoTag + '">All <span class="num">' + left + "</span></button>" +
       used.map(function (tg) { return '<button type="button" class="tag-filter" data-todo-filter="' + esc(tg.id) + '" aria-pressed="' + (S.todoTag === tg.id) + '" style="--tag:var(' + TAG_COLORS[tg.c] + ')"><i></i>' + esc(tg.label) + ' <span class="num">' + (counts[tg.id] || 0) + "</span></button>"; }).join("") + "</div>" : "";
     var addTag = S.todoAddTag || S.todoTag;
-    return '<div class="card"><div class="sec-head"><h2>To-do</h2><div class="sec-title">' + (all.length ? '<span class="badge ' + (left ? "warning" : "success") + '">' + (left ? left + " to do" : "All done") + "</span>" : "") +
+    return '<div class="card"><div class="sec-head"><h2>Household to-do</h2><div class="sec-title">' + (all.length ? '<span class="badge ' + (left ? "warning" : "success") + '">' + (left ? left + " to do" : "All done") + "</span>" : "") +
       (S.canWrite ? '<button type="button" class="btn btn-subtle" data-action="todo-tags">Tags</button>' : "") + "</div></div>" +
       (S.canWrite ? '<form class="add-row" data-todo-form><input id="todoInput" placeholder="Add a to-do…" aria-label="New to-do" autocomplete="off" value="' + esc(S.todoDraft) + '">' + tagPick("data-todo-addtag", "new", addTag, "Tag for the new to-do") + '<button class="btn btn-primary" type="submit">' + icon("plus") + "Add</button></form>" : "") +
       filters +
