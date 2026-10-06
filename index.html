@@ -888,6 +888,27 @@ code.secret { word-break: break-all; font-size: 12px; background: var(--bg-faint
     var y = window.scrollY;
     root.innerHTML = fn();
     window.scrollTo(0, y);
+    noteHealth();
+  }
+  // The household's health score is saved when it changes, so a big move can be notified. Only once
+  // everything has loaded, so a half-loaded page can never cause a false alarm. At most once every
+  // 30 minutes (by anyone), so two devices that see slightly different figures can't bounce it.
+  var healthTimer = null, HEALTH_GAP = 30 * 60000;
+  function noteHealth() {
+    if (!db || !S.loaded || !S.canWrite || S.healthSaved === undefined) return;
+    clearTimeout(healthTimer);
+    healthTimer = setTimeout(function () {
+      if (!db) return;
+      var ms = txMonths(); if (!ms.length) return;
+      var m = ms.indexOf(monthKey()) >= 0 ? monthKey() : ms[ms.length - 1], hl = health(m, allTx());
+      if (hl.checks.length < 2) return;
+      var sc = Math.round(hl.score);
+      if (S.healthSaved === sc) return;
+      var wait = S.healthAt ? S.healthAt + HEALTH_GAP - Date.now() : 0;
+      if (wait > 0) { healthTimer = setTimeout(noteHealth, wait + 1000); return; }
+      S.healthSaved = sc; S.healthAt = Date.now();
+      saveMeta("health", { score: sc, at: new Date().toISOString() });
+    }, 4000);
   }
   function go(page) { S.page = page; render(); window.scrollTo(0, 0); var h = root.querySelector("h1"); if (h) { h.setAttribute("tabindex", "-1"); h.focus({ preventScroll: true }); } }
 
@@ -2108,6 +2129,7 @@ code.secret { word-break: break-all; font-size: 12px; background: var(--bg-faint
             S.billsIgnore.map(function (k) { return '<div class="row-between" style="gap:12px"><span>' + esc(billName(k)) + '</span>' + (S.canWrite ? '<button type="button" class="btn btn-subtle" data-bill-unhide="' + esc(k) + '">Show again</button>' : "") + "</div>"; }).join("") + "</div></div>" : "") +
           '<div class="tile"><h3 class="mb-xs">Backup</h3><p class="sm muted mb-md">Download everything as one file to keep safe' + (restoreBackup ? ", or restore from one." : ". You\'ll also use it to move to your own hosting.") + '</p><div class="head-actions"><button type="button" class="btn btn-neutral" data-backup="download">' + icon("arrowdown") + 'Download a backup</button>' +
           (restoreBackup && S.canWrite ? '<button type="button" class="btn btn-neutral" data-backup="restore">' + icon("upload") + 'Restore from a backup</button><input type="file" id="restoreFile" accept=".json,application/json" hidden>' : "") + "</div></div>" +
+          (pushTile ? pushTile() : "") +
           (signOut ? '<div class="tile row-between" style="gap:12px"><div><h3 class="mb-xs">Sign out</h3><p class="sm muted">The app also signs you out by itself after ' + IDLE_MINUTES + ' minutes without use.</p></div><button type="button" class="btn btn-neutral" data-backup="signout">Sign out</button></div>' : "") +
           // Deletes live apart from everything else, and each opens its own window to confirm
           (S.canWrite ? '<div class="tile danger-zone"><h3 class="mb-xs">Danger zone</h3><p class="sm muted mb-md">These can\'t be undone, and they delete things for both of you.</p><div class="head-actions">' +
@@ -2142,13 +2164,13 @@ code.secret { word-break: break-all; font-size: 12px; background: var(--bg-faint
   }
   function wipeAll() {
     ["items", "accounts", "tx", "goals", "todos", "costs"].forEach(function (coll) { Object.keys(S[STORE[coll]]).forEach(function (id) { delDoc(coll, id); }); });
-    ["household", "history", "rules", "bills", "budgets", "tags"].forEach(function (m) { if (db) write(function () { return db.doc("meta/" + m).delete(); }); });
+    ["household", "history", "rules", "bills", "budgets", "tags", "health"].forEach(function (m) { if (db) write(function () { return db.doc("meta/" + m).delete(); }); });
     S.history = { points: {} }; S.rules = {}; S.budgets = {}; S.billsIgnore = []; S.tags = null; S.todoTag = ""; S.household = { household: "Our household", p1: "Person 1", p2: "Person 2" }; S.chat.turns = [];
   }
 
   // ══ Backup ═════════════════════════════════════════════════════════════
   var PRIVACY_NOTE = "From statements: the date, amount, a tidied description and a category. Account numbers, sort codes, card numbers and long reference numbers are stripped out before anything is saved. The CSV file itself is never stored. Only the two of you, signed in with two-factor, can see or change anything.";
-  var restoreBackup = null, signOut = null;
+  var restoreBackup = null, signOut = null, pushTile = null, pushClick = null;
   function buildBackup() {
     var docs = {};
     function put(coll, map) { docs[coll] = {}; Object.keys(map).forEach(function (id) { docs[coll][id] = clean(map[id]); }); }
@@ -2167,6 +2189,8 @@ code.secret { word-break: break-all; font-size: 12px; background: var(--bg-faint
     });
   }
   el("genBody").addEventListener("click", function (e) {
+    var pb = e.target.closest("[data-push]");
+    if (pb && pushClick) { pushClick(pb.getAttribute("data-push")); return; }
     var u = e.target.closest("[data-bill-unhide]");
     if (u && S.canWrite) {
       var key = u.getAttribute("data-bill-unhide");
