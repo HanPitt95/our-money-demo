@@ -411,9 +411,6 @@ dialog.wide { width: min(640px, calc(100vw - 24px)); }
 .gauge .g-num { font-size: 30px; font-weight: 600; line-height: 1; }
 .hero .ico { vertical-align: -3px; }
 .hero-link { color: #fff; text-decoration: underline; text-underline-offset: 3px; font-size: 13px; }
-.steps { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 12px; }
-.steps li { display: flex; align-items: flex-start; gap: 12px; }
-.step-ico { width: 32px; height: 32px; border-radius: var(--corner-md); background: rgba(255,255,255,0.15); display: grid; place-items: center; flex-shrink: 0; }
 .hero .hero-btn { color: #fff; }
 .hero .hero-btn:hover { background: rgba(255,255,255,0.15); color: #fff; }
 .hero .hero-btn[disabled] { opacity: .7; cursor: default; }
@@ -423,6 +420,19 @@ dialog.wide { width: min(640px, calc(100vw - 24px)); }
 
 .hero-title { background: none; border: 0; padding: 0; color: #fff; cursor: pointer; display: inline-flex; align-items: center; gap: 4px; font-size: 13px; text-align: left; }
 .hero-title:hover { color: #fff; }
+/* Home: the health chip on the pink card, Needs attention, and the two doors */
+.health-chip { display: inline-flex; align-items: center; gap: 8px; margin-top: 20px; padding: 10px 14px; min-height: 44px; border: 0; border-radius: 999px; background: rgba(255,255,255,0.14); color: #fff; font: inherit; font-size: 14px; text-align: left; cursor: pointer; }
+.health-chip:hover { background: rgba(255,255,255,0.22); }
+.health-chip b { font-weight: 600; }
+.need-row > .ico:last-child, .door .ico { color: var(--text-tertiary); flex-shrink: 0; }
+.need-row .main p:first-child { white-space: normal; }
+.all-clear { display: flex; align-items: center; gap: 10px; color: var(--success-text); }
+.all-clear .ico { width: 20px; height: 20px; }
+.all-clear p { margin: 0; color: var(--text-secondary); }
+button.door { display: block; width: 100%; border: 0; font: inherit; color: inherit; text-align: left; cursor: pointer; }
+button.door:hover { background: var(--surface-hover); }
+.doors { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+@media (max-width: 640px) { .doors { gap: 10px; } .door.card { padding: 16px; } .door .big { font-size: 22px; } }
 .spark { width: 100%; height: 28px; display: block; margin-top: 14px; }
 .spark-key { display: flex; align-items: center; gap: 6px; margin-top: 4px; }
 .spark-key i { display: inline-block; width: 12px; height: 2px; background: rgba(255,255,255,0.95); }
@@ -939,28 +949,76 @@ code.secret { word-break: break-all; font-size: 12px; background: var(--bg-faint
   }
 
   // ══ Page: Home ═════════════════════════════════════════════════════════
+  // Home answers "are we OK this month, and what needs us?": this month so far with a health chip,
+  // Needs attention, and a door each to Spending and Wealth. The detail lives on those pages and on Plan.
   function pageHome() {
-    var txs = allTx(), m = currentMonth(), hl = txs.length ? health(m, txs) : null;
-    var sub = esc(dateOnlyFmt(new Date())) + (hl && hl.checks.length >= 2 ? " · " + esc(healthLabel(hl.score)) : "");
-    var head = pageHead(esc(S.household.household), sub,
+    var txs = allTx(), m = currentMonth();
+    var head = pageHead(esc(S.household.household), esc(dateOnlyFmt(new Date())),
       (txs.length ? monthSelect(m) : "") + (S.canWrite ? '<button class="btn btn-neutral" data-action="addtx">' + icon("plus") + 'Add transaction</button><button class="btn btn-primary" data-action="import">' + icon("upload") + "Import</button>" : ""));
-    var html = head;
-    if (!txs.length) {
-      return html + '<div class="stack">' + emptyImport() + wealthGrowthCard() + "</div>";
-    }
+    if (!txs.length) return head + '<div class="stack">' + emptyImport() + needsCard() + wealthDoor() + "</div>";
     // A month still in progress is compared with the same point last month, not the whole of it
     var soFar = m === monthKey(), day = new Date().getDate(), pm = addMonths(m, -1), prevAll = inMonth(txs, pm);
     var st = stats(inMonth(txs, m)), prev = stats(soFar ? prevAll.filter(function (t) { return +t.d.slice(8, 10) <= day; }) : prevAll);
     var change = prevAll.length ? st.net - prev.net : null;
     var hero = '<div class="hero"><div class="row-between mb-md"><button type="button" class="hero-title" data-go-tx="" data-sp-tab="overview" title="See this month\'s spending">Net cashflow' + (soFar ? " so far" : "") + ", " + esc(monthLabel(m, "long")) + " " + icon("chev") + "</button>" +
       (change != null ? '<span class="badge" title="' + (soFar ? "Compared with the first " + day + " days of " + esc(monthName(pm)) : "Compared with " + esc(monthName(pm))) + '">' + (change >= 0 ? "↑ " : "↓ ") + gbp(change) + (soFar ? " vs this time in " : " vs ") + esc(monthLabel(pm)) + "</span>" : "") + "</div>" +
-      '<p class="big num">' + signed(st.net) + '</p><p class="sm mt-xs">Money in ' + gbp(st.inc) + ", money out " + gbp(st.out) + "</p>" + heroSpark(txs, m) + healthBlock(m, txs) + "</div>";
-    html += '<div class="grid g3" style="margin-bottom:24px">' + hero + cashflowCard(txs, m) + wealthGrowthCard() + "</div>";
-    html += '<div style="margin-bottom:24px">' + budgetCard(txs, m) + "</div>";
-    var recent = inMonth(txs, m).slice(0, 7);
-    html += '<div class="grid g2"><div class="card"><div class="sec-head"><h2>Recent transactions</h2><button class="btn btn-subtle" data-go-tx="">All ' + icon("chev") + "</button></div>" +
-      (recent.length ? '<div class="rows">' + recent.map(function (t) { return txRow(t, true); }).join("") + "</div>" : '<p class="muted">Nothing in ' + esc(monthLabel(m, "long")) + " yet.</p>") + "</div>" + billsCard() + "</div>";
-    return html;
+      '<p class="big num">' + signed(st.net) + '</p><p class="sm mt-xs">Money in ' + gbp(st.inc) + ", money out " + gbp(st.out) + "</p>" + heroSpark(txs, m) + healthChip(m, txs) + "</div>";
+    return head + '<div class="grid g2" style="margin-bottom:24px">' + hero + needsCard() + '</div><div class="doors">' + spendDoor(txs, m) + wealthDoor() + "</div>";
+  }
+  // A small button on the pink card: the health label and score, opening Plan's Health tab
+  function healthChip(m, txs) {
+    var hl = health(m, txs), ok = hl.checks.length >= 2;
+    return '<button type="button" class="health-chip" data-open="plan-health">' + icon("sparkle") + "<span>Financial health: <b>" + (ok ? esc(healthLabel(hl.score)) + "</b>, " + Math.round(hl.score) + "/100" : "not enough figures yet</b>") + "</span>" + icon("chev") + "</button>";
+  }
+  // What needs one of you now. Each row opens the place to deal with it.
+  function needRow(ic, title, sub, attrs, warn) {
+    return '<button type="button" class="tx-row need-row" ' + attrs + '><div class="icon-tile sm' + (warn ? " danger" : "") + '">' + icon(ic) + '</div><div class="main"><p>' + title + '</p><p class="sm muted">' + sub + "</p></div>" + icon("chev") + "</button>";
+  }
+  function needsCard() {
+    var rows = [], cur = monthKey(), spend = 'data-go-tx="" data-sp-tab="overview"';
+    // Bills due in the next week
+    upcomingBills().filter(function (b) { return b.days <= 7; }).slice(0, 3).forEach(function (b) {
+      rows.push(needRow("receipt", esc(b.name) + " · " + gbp(b.amount, 2), b.days < 0 ? "Usually paid by now" : b.days === 0 ? "Due today" : b.days === 1 ? "Due tomorrow" : "Due in " + b.days + " days", spend, b.days <= 0));
+    });
+    // Budgets near or over this month
+    var st = stats(inMonth(allTx(), cur));
+    budgetKeys().map(function (k) { return { k: k, spent: Math.max(0, st.byCat[k] || 0), b: S.budgets[k] }; })
+      .filter(function (x) { return x.spent >= x.b * 0.85; }).sort(function (x, y) { return y.spent / y.b - x.spent / x.b; }).slice(0, 3).forEach(function (x) {
+        var over = x.spent > x.b;
+        rows.push(needRow(CAT[x.k].icon, esc(CAT[x.k].label) + " · " + gbp(x.spent) + " of " + gbp(x.b), over ? "Over this month's budget" : "Nearly at this month's budget", spend, over));
+      });
+    // Open to-dos, and who they're for
+    var open = vals(S.todos).filter(function (t) { return !t.done; });
+    if (open.length) {
+      var by = { p1: 0, p2: 0, any: 0 }; open.forEach(function (t) { by[t.who === "p1" || t.who === "p2" ? t.who : "any"]++; });
+      var who = [["p1", ownerName("p1")], ["p2", ownerName("p2")], ["any", "anyone"]].filter(function (w) { return by[w[0]]; }).map(function (w) { return by[w[0]] + " for " + esc(w[1]); });
+      rows.push(needRow("listplus", open.length + " to-do" + (open.length === 1 ? "" : "s") + " waiting", who.join(" · "), 'data-open="plan"'));
+    }
+    // Accounts due a newer statement (synced or imported more than a week ago, or never)
+    var fr = accFresh(), due = vals(S.accounts).filter(function (a) { return !fr[a.id] || fr[a.id].behind; });
+    if (due.length) {
+      rows.push(needRow("upload", due.length + " account" + (due.length === 1 ? "" : "s") + " due a newer statement",
+        due.slice(0, 2).map(function (a) { return esc(a.name) + " (" + esc(freshText(fr[a.id]).replace(/^./, function (c) { return c.toLowerCase(); })) + ")"; }).join(", ") + (due.length > 2 ? " and " + (due.length - 2) + " more" : ""),
+        S.canWrite ? 'data-action="import"' : 'data-go-tx="" data-sp-tab="accounts"'));
+    }
+    // This month's Wealth update
+    var items = vals(S.items), left = items.filter(function (i) { return !doneThisMonth(i); }).length;
+    if (items.length && left) rows.push(needRow("chart", esc(monthName(cur)) + " Wealth update", (items.length - left) + " of " + items.length + " done", 'data-open="wealth"'));
+    return '<div class="card"><div class="sec-head"><h2>Needs attention</h2>' + (rows.length ? '<span class="badge warning">' + rows.length + "</span>" : "") + "</div>" +
+      (rows.length ? '<div class="rows">' + rows.join("") + "</div>" : '<div class="all-clear">' + icon("checkcircle") + "<p>Nothing needs you right now.</p></div>") + "</div>";
+  }
+  // The two doors: this month's spending, and net worth with its change since the last recorded month
+  function spendDoor(txs, m) {
+    var st = stats(inMonth(txs, m));
+    return '<button type="button" class="card door" data-go-tx="" data-sp-tab="overview"><div class="row-between"><p class="muted">Spending</p>' + icon("chev") + '</div><p class="big mt-xs">' + gbp(st.out) + '</p><p class="sm faint mt-xs">Spent ' + (m === monthKey() ? "so far in " + esc(monthName(m)) : "in " + esc(monthLabel(m, "long"))) + "</p></button>";
+  }
+  function wealthDoor() {
+    var items = vals(S.items), t = wTotals(items);
+    if (!items.length) return '<button type="button" class="card door" data-open="wealth"><div class="row-between"><p class="muted">Wealth</p>' + icon("chev") + '</div><p class="mt-xs">Add what you own and owe, then update it each month to see what\'s growing.</p></button>';
+    var pts = S.history.points || {}, pk = Object.keys(pts).filter(function (k) { return k < monthKey() && pts[k]; }).sort().pop(), p = pk ? pts[pk] : null;
+    var chg = p ? t.net - ((Number(p.a) || 0) - (Number(p.l) || 0)) : null;
+    return '<button type="button" class="card door" data-open="wealth"><div class="row-between"><p class="muted">Net worth</p>' + icon("chev") + '</div><p class="big brand mt-xs">' + (t.net < 0 ? "−" : "") + gbp(t.net) + "</p>" +
+      (chg == null ? '<p class="sm faint mt-xs">What you own minus what you owe</p>' : '<p class="sm mt-xs ' + (chg >= 0 ? "pos" : "neg") + '">' + signed(chg) + " since " + esc(monthName(pk)) + "</p>") + "</button>";
   }
 
   function smoothPath(pts) {
@@ -983,7 +1041,6 @@ code.secret { word-break: break-all; font-size: 12px; background: var(--bg-faint
     var ms = txMonths(), last = ms[ms.length - 1]; if (sel > last) last = sel;
     var months = []; for (var i = 8; i >= 0; i--) { var k = addMonths(last, -i); if (k >= ms[0]) months.push(k); }
     var data = months.map(function (k) { var s = stats(inMonth(txs, k)); return { m: k, inc: s.inc, out: s.out }; });
-    var cur = data.filter(function (d) { return d.m === sel; })[0] || { inc: 0, out: 0 };
     var VW = 420, VH = 250, PL = 40, PR = 8, PT = 12, PB = 26, pw = VW - PL - PR, ph = VH - PT - PB, base = PT + ph;
     var maxRaw = Math.max(1, Math.max.apply(null, data.map(function (d) { return Math.max(d.inc, d.out); })));
     var step = Math.pow(10, Math.floor(Math.log10(maxRaw))), nice = [1, 2, 2.5, 5, 10].map(function (x) { return x * step; }).filter(function (x) { return x * 4 >= maxRaw; })[0] || step * 10;
@@ -1005,8 +1062,6 @@ code.secret { word-break: break-all; font-size: 12px; background: var(--bg-faint
     });
     svg += "</svg>";
     return '<div class="card chart"><div class="mb-md"><h2>Cashflow</h2><p class="sm muted mt-xs">Money in vs money out. Tap a month to see it.</p></div>' +
-      '<div class="grid g2 mb-md" style="gap:10px"><div class="tile row-between"><div><p class="sm muted">Money in' + (sel === monthKey() ? " so far" : "") + '</p><p class="num" style="font-size:17px;font-weight:600">' + gbp(cur.inc) + '</p></div><div class="icon-tile sm" style="color:var(--chart-in)">' + icon("arrowdown") + "</div></div>" +
-      '<div class="tile row-between"><div><p class="sm muted">Money out' + (sel === monthKey() ? " so far" : "") + '</p><p class="num" style="font-size:17px;font-weight:600">' + gbp(cur.out) + '</p></div><div class="icon-tile sm" style="color:var(--chart-out)">' + icon("arrowup") + "</div></div></div>" +
       '<div class="legend"><span><i style="background:var(--chart-in)"></i>In</span><span><i style="background:var(--chart-out)"></i>Out</span><span><i style="background:var(--text-primary);height:2px;width:14px"></i>Net</span></div>' + svg + "</div>";
   }
 
@@ -1089,24 +1144,6 @@ code.secret { word-break: break-all; font-size: 12px; background: var(--bg-faint
     return avg;
   }
   function budgetKeys() { return Object.keys(S.budgets).filter(function (k) { return S.budgets[k] > 0 && CAT[k]; }).sort(function (a, b) { return S.budgets[b] - S.budgets[a]; }); }
-  function budgetCard(txs, m) {
-    var st = stats(inMonth(txs, m)), keys = budgetKeys(), body;
-    if (keys.length) {
-      body = '<div class="stack" style="gap:16px">' + keys.map(function (k) {
-        var spent = Math.max(0, st.byCat[k] || 0), b = S.budgets[k], pct = spent / b * 100, over = spent > b, near = !over && pct >= 85;
-        return '<div class="row-between" style="gap:12px"><div class="icon-tile sm' + (over ? " danger" : "") + '">' + icon(CAT[k].icon) + '</div><div style="flex:1;min-width:0"><div class="row-between mb-xs"><span>' + esc(CAT[k].label) + '</span><span class="row-between" style="gap:8px"><span class="sm muted num">' + gbp(spent) + " / " + gbp(b) + "</span>" +
-          (over ? '<span class="badge danger">Over</span>' : near ? '<span class="badge warning">Near limit</span>' : "") + "</span></div>" + bar(pct, over ? "over" : "") + "</div></div>";
-      }).join("") + "</div>";
-      var loose = Object.keys(st.byCat).filter(function (k) { return keys.indexOf(k) < 0 && st.byCat[k] > 0; }).reduce(function (s, k) { return s + st.byCat[k]; }, 0);
-      if (loose > 0) body += '<p class="sm muted mt-lg">' + gbp(loose) + " spent in categories without a budget.</p>";
-    } else if (txs.length) {
-      var top = Object.keys(st.byCat).filter(function (k) { return st.byCat[k] > 0; }).sort(function (a, b) { return st.byCat[b] - st.byCat[a]; }).slice(0, 6), max = top.length ? st.byCat[top[0]] : 1;
-      body = '<p class="muted mb-lg">Set a monthly budget for the categories that matter. Here\'s where the money went this month:</p><div class="stack" style="gap:14px">' + top.map(function (k) {
-        return '<div class="row-between" style="gap:12px"><div class="icon-tile sm">' + icon(CAT[k].icon) + '</div><div style="flex:1;min-width:0"><div class="row-between mb-xs"><span>' + esc(CAT[k].label) + '</span><span class="sm muted num">' + gbp(st.byCat[k]) + "</span></div>" + bar(st.byCat[k] / max * 100) + "</div></div>";
-      }).join("") + "</div>";
-    } else body = '<p class="muted">Import some statements, then set a monthly budget for each kind of spending.</p>';
-    return '<div class="card"><div class="sec-head"><h2>Budget by category</h2>' + (S.canWrite ? '<button class="btn btn-subtle" data-action="budgets">' + (keys.length ? "Edit budgets" : "Set budgets") + " " + icon("chev") + "</button>" : "") + "</div>" + body + "</div>";
-  }
   function openBudgets() {
     var avg = catAverages(allTx(), currentMonth());
     openForm({
@@ -1311,7 +1348,7 @@ code.secret { word-break: break-all; font-size: 12px; background: var(--bg-faint
     var txs = allTx(), m = currentMonth(), hl = health(m, txs), ok = hl.checks.length >= 2;
     if (!ok) return '<div class="card" style="margin-bottom:24px"><h2 class="mb-md">Your financial health</h2><p class="muted">Import a few months of statements and fill in the Wealth page, and a health score appears here, with what\'s going well and what to improve.</p></div>' + chatCard();
     var good = hl.checks.filter(function (c) { return c.score >= 75 && c.good; }), bad = hl.checks.filter(function (c) { return c.score < 75 && c.step; }).sort(function (a, b) { return a.score - b.score; });
-    return '<div class="hero solo" style="margin-bottom:24px">' + healthBlock(m, txs, true) + "</div>" +
+    return '<div class="hero solo" style="margin-bottom:24px">' + healthBlock(m, txs) + "</div>" +
       '<div class="grid g2" style="margin-bottom:24px"><div class="card"><div class="sec-head"><h2>What to improve</h2><span class="badge warning">' + bad.length + (bad.length === 1 ? " action" : " actions") + '</span></div><div class="stack" style="gap:12px">' +
       (bad.length ? bad.map(function (c) { return insightTile(c.step.title, c.step.detail, false, c.key); }).join("") : '<p class="muted">Every check is on track.</p>') + "</div></div>" +
       '<div class="card"><div class="sec-head"><h2>What\'s going well</h2><span class="badge success">' + good.length + (good.length === 1 ? " win" : " wins") + '</span></div><div class="stack" style="gap:12px">' +
@@ -1564,19 +1601,12 @@ code.secret { word-break: break-all; font-size: 12px; background: var(--bg-faint
       '<div class="g-lbl"><span class="g-num">' + score + '</span><span class="sm">/ 100</span></div></div>';
   }
   function stepAdded(title) { return vals(S.todos).some(function (t) { return t.label === title; }); }
-  function healthBlock(m, txs, brief) {
+  function healthBlock(m, txs) {
     var hl = health(m, txs);
     if (hl.checks.length < 2) {
       return '<div class="ring-wrap"><div><p style="font-weight:600">Financial health</p><p class="sm mt-xs">Add a few months of statements and your balance sheet on the Wealth page, and a health score appears here, checked against UK rules of thumb.</p></div></div>';
     }
-    var steps = hl.checks.filter(function (c) { return c.step; }).sort(function (a, b) { return a.score - b.score; }).slice(0, 3);
-    if (brief) steps = [];
-    return '<div class="ring-wrap">' + gaugeSvg(hl.score, 120) + '<div><p class="sm">' + icon("sparkle") + ' Financial health</p><p style="font-weight:600;font-size:17px" class="mt-xs">' + healthLabel(hl.score) + '</p><p class="sm mt-xs">' + hl.checks.length + " checks, " + (hl.months > 1 ? "averaged over " + hl.months + " full months" : hl.partial ? "from this month so far" : "from one month") + '.</p><button class="link hero-link mt-xs" data-action="health">How it\'s worked out</button></div></div>' +
-      (steps.length ? '<p class="sm" style="margin:16px 0 10px">Ways to improve it</p><ul class="steps">' + steps.map(function (c) {
-        var added = stepAdded(c.step.title);
-        return '<li><div class="step-ico">' + icon(c.step.icon) + '</div><div style="flex:1;min-width:0"><p style="font-weight:500">' + esc(c.step.title) + '</p><p class="sm">' + esc(c.step.detail) + "</p></div>" +
-          (S.canWrite ? '<button class="icon-btn hero-btn" data-step-todo="' + esc(c.key) + '" aria-label="' + (added ? "Added to to-do" : "Add to to-do") + '"' + (added ? " disabled" : "") + ">" + icon(added ? "check" : "plus") + "</button>" : "") + "</li>";
-      }).join("") + "</ul>" : brief ? "" : '<p class="sm" style="margin-top:14px">Every check is on track.</p>');
+    return '<div class="ring-wrap">' + gaugeSvg(hl.score, 120) + '<div><p class="sm">' + icon("sparkle") + ' Financial health</p><p style="font-weight:600;font-size:17px" class="mt-xs">' + healthLabel(hl.score) + '</p><p class="sm mt-xs">' + hl.checks.length + " checks, " + (hl.months > 1 ? "averaged over " + hl.months + " full months" : hl.partial ? "from this month so far" : "from one month") + '.</p><button class="link hero-link mt-xs" data-action="health">How it\'s worked out</button></div></div>';
   }
   function openHealth() {
     var m = currentMonth(), hl = health(m, allTx());
@@ -1641,13 +1671,29 @@ code.secret { word-break: break-all; font-size: 12px; background: var(--bg-faint
     } else if (notYetFor(accs.filter(function (a) { return (a.owner || "joint") === o; }), month)) {
       html += '<p class="sm warn-text mb-lg">Nothing imported for ' + esc(monthName(month)) + " yet for " + esc(o === "joint" ? "joint accounts" : ownerName(o) + "'s accounts") + ".</p>";
     }
-    // Every category, biggest first. Tapping one shows its payments.
-    var cats = Object.keys(st.byCat).filter(function (k) { return st.byCat[k] > 0 && CAT[k]; }).sort(function (a, b) { return st.byCat[b] - st.byCat[a]; });
-    html += '<div class="card"><div class="sec-head"><h2>Spending by category</h2><button type="button" class="btn btn-subtle" data-sptab="payments">Payments ' + icon("chev") + "</button></div>" +
-      (cats.length ? '<div class="stack" style="gap:6px">' + cats.map(function (k) {
-        return '<button type="button" class="cat-row" data-sp-cat="' + esc(k) + '" aria-label="' + esc(CAT[k].label) + ": " + esc(gbp(st.byCat[k])) + ', see these payments"><div class="icon-tile sm">' + icon(CAT[k].icon) + '</div><div style="flex:1;min-width:0"><div class="row-between mb-xs"><span>' + esc(CAT[k].label) + '</span><span class="sm muted num">' + gbp(st.byCat[k]) + "</span></div>" + bar(st.out ? st.byCat[k] / st.out * 100 : 0) + "</div></button>";
-      }).join("") + "</div>" : '<p class="muted">No spending ' + (month ? "in " + esc(monthLabel(month, "long")) : "yet") + ".</p>") + "</div>";
+    // The chart of money in and out by month, and (for everyone) bills coming up
+    var chart = cashflowCard(o === "all" ? txs : personTx(txs, o), month || monthKey());
+    html += o === "all" ? '<div class="grid g2" style="margin-bottom:24px">' + chart + billsCard() + "</div>" : '<div style="margin-bottom:24px">' + chart + "</div>";
+    html += spCategories(st, o, month);
     return html;
+  }
+
+  // Every category, biggest first. For everyone in one month, budgets sit alongside: budgeted
+  // categories come first with "£X of £Y". Tapping a category shows its payments.
+  function spCategories(st, o, month) {
+    var keys = o === "all" && month ? budgetKeys() : [];
+    var rest = Object.keys(st.byCat).filter(function (k) { return st.byCat[k] > 0 && CAT[k] && keys.indexOf(k) < 0; }).sort(function (a, b) { return st.byCat[b] - st.byCat[a]; });
+    function row(k, right, pct, cls, warn) {
+      return '<button type="button" class="cat-row" data-sp-cat="' + esc(k) + '"><div class="icon-tile sm' + (warn ? " danger" : "") + '">' + icon(CAT[k].icon) + '</div><div style="flex:1;min-width:0"><div class="row-between mb-xs" style="gap:8px"><span>' + esc(CAT[k].label) + '</span><span class="row-between" style="gap:8px">' + right + "</span></div>" + bar(pct, cls) + "</div></button>";
+    }
+    var rows = keys.map(function (k) {
+      var spent = Math.max(0, st.byCat[k] || 0), b = S.budgets[k], pct = spent / b * 100, over = spent > b, near = !over && pct >= 85;
+      return row(k, '<span class="sm muted num">' + gbp(spent) + " of " + gbp(b) + "</span>" + (over ? '<span class="badge danger">Over</span>' : near ? '<span class="badge warning">Near limit</span>' : ""), pct, over ? "over" : "", over);
+    }).concat(rest.map(function (k) { return row(k, '<span class="sm muted num">' + gbp(st.byCat[k]) + "</span>", st.out ? st.byCat[k] / st.out * 100 : 0, ""); }));
+    var edit = o === "all" && S.canWrite ? '<button type="button" class="btn btn-subtle" data-action="budgets">' + (budgetKeys().length ? "Edit budgets" : "Set budgets") + " " + icon("chev") + "</button>" : "";
+    return '<div class="card"><div class="sec-head"><h2>Spending by category</h2>' + edit + "</div>" +
+      (o === "all" && month && !budgetKeys().length && S.canWrite ? '<p class="sm muted mb-md">Set a monthly budget for the categories that matter, and they\'ll show here against what\'s spent.</p>' : "") +
+      (rows.length ? '<div class="stack" style="gap:6px">' + rows.join("") + "</div>" : '<p class="muted">No spending ' + (month ? "in " + esc(monthLabel(month, "long")) : "yet") + ".</p>") + "</div>";
   }
 
   function spPayments(txs, month) {
@@ -1805,7 +1851,7 @@ code.secret { word-break: break-all; font-size: 12px; background: var(--bg-faint
       return '<div><div class="row-between mb-xs"><span>' + c.label + '</span><span><span class="sm muted num">' + gbp(v) + '</span>&nbsp;&nbsp;<span class="sm brand num" style="font-weight:600">' + pct + "%</span></span></div>" + '<div class="bar"><span style="width:' + pct + '%;background:var(' + c.c + ')"></span></div>' + "</div>";
     }).join("");
     // The three totals are already at the top of the page, so this card only shows the split
-    var html = '<div class="stack">' + wMonthly() + '<div class="card"><h2 class="mb-lg">Where your assets are</h2><div class="stack" style="gap:16px">' + catRows + "</div></div>";
+    var html = '<div class="stack">' + (S.who === "all" ? wealthGrowthCard() : "") + wMonthly() + '<div class="card"><h2 class="mb-lg">Where your assets are</h2><div class="stack" style="gap:16px">' + catRows + "</div></div>";
     var prop = sumV(byGroup(items, "property")), mort = sumV(byGroup(items, "mortgage")), ratios = "";
     if (prop > 0 && mort > 0) { var ltv = Math.round(mort / prop * 100); ratios += '<div class="tile"><div class="row-between mb-md"><h3>Loan-to-value</h3><span class="badge ' + (ltv > 75 ? "warning" : "success") + '">' + ltv + '%</span></div><p class="sm muted">Mortgage ' + gbp(mort) + " against property worth " + gbp(prop) + '</p><div class="mt-md">' + bar(ltv, ltv > 75 ? "warn" : "ok") + "</div></div>"; }
     if (t.assets > 0) { var dta = Math.round(t.liabs / t.assets * 100); ratios += '<div class="tile"><div class="row-between mb-md"><h3>Debt-to-assets</h3><span class="badge ' + (dta > 50 ? "warning" : "success") + '">' + dta + '%</span></div><p class="sm muted">Everything owed (' + gbp(t.liabs) + ') as a share of everything owned</p><div class="mt-md">' + bar(dta, dta > 50 ? "warn" : "ok") + "</div></div>"; }
@@ -2872,7 +2918,7 @@ code.secret { word-break: break-all; font-size: 12px; background: var(--bg-faint
     d.addEventListener("click", function (e) { if (e.target.closest("[data-close]") || e.target === d) d.close(); });
   });
   document.addEventListener("click", function (e) {
-    var t = e.target.closest("[data-page],[data-action],[data-tx],[data-acc],[data-goal],[data-stab],[data-wg],[data-cost-del],[data-cost-edit],[data-cost-todo],[data-witem],[data-wtab],[data-who],[data-wbx],[data-wbrange],[data-sptab],[data-ptab],[data-sp-cat],[data-go-tx],[data-pick-month],[data-todo-del],[data-todo-filter],[data-bill-todo],[data-bill-ignore],[data-step-todo]");
+    var t = e.target.closest("[data-page],[data-action],[data-tx],[data-acc],[data-goal],[data-stab],[data-wg],[data-cost-del],[data-cost-edit],[data-cost-todo],[data-witem],[data-wtab],[data-who],[data-wbx],[data-wbrange],[data-sptab],[data-ptab],[data-open],[data-sp-cat],[data-go-tx],[data-pick-month],[data-todo-del],[data-todo-filter],[data-bill-todo],[data-bill-ignore],[data-step-todo]");
     if (!t || t.closest("dialog")) return;
     var a;
     if ((a = t.getAttribute("data-page")) !== null) return go(a);
@@ -2920,11 +2966,12 @@ code.secret { word-break: break-all; font-size: 12px; background: var(--bg-faint
     if ((a = t.getAttribute("data-who")) !== null) { S.who = a; render(); if (!t.closest(".seg")) window.scrollTo(0, 0); return; }
     if ((a = t.getAttribute("data-wbx")) !== null) { S.wbOpen = S.wbOpen || {}; S.wbOpen[a] = !S.wbOpen[a]; return render(); }
     if ((a = t.getAttribute("data-wbrange")) !== null) { S.wbRange = +a === 12 ? 12 : 6; return render(); }
+    if ((a = t.getAttribute("data-open")) !== null) { if (openFrom(a)) { if (S.page === "wealth") S.who = "all"; go(S.page); } return; }
     if ((a = t.getAttribute("data-ptab")) !== null) { S.planTab = a; render(); if (!t.closest('[role="tablist"]')) window.scrollTo(0, 0); return; }
     if ((a = t.getAttribute("data-sptab")) !== null) { S.spTab = a; render(); if (!t.closest('[role="tablist"]')) window.scrollTo(0, 0); return; }
     if ((a = t.getAttribute("data-sp-cat")) !== null) { S.txq = { q: "", month: S.txq.month, cat: a, acc: "all" }; S.spTab = "payments"; render(); return window.scrollTo(0, 0); }
     if ((a = t.getAttribute("data-go-tx")) !== null) { S.txq = { q: "", month: null, cat: "all", acc: "all" }; S.who = a || "all"; S.spTab = t.getAttribute("data-sp-tab") || "payments"; return go("transactions"); }
-    if ((a = t.getAttribute("data-pick-month")) !== null) { S.month = a; return render(); }
+    if ((a = t.getAttribute("data-pick-month")) !== null) { S.month = a; if (S.txq.month === "") S.txq.month = null; return render(); }
     if ((a = t.getAttribute("data-todo-del")) !== null) {
       var td = S.todos[a]; if (!td || !S.canWrite) return;
       delDoc("todos", a); toast("Removed “" + td.label + "”", function () { saveDoc("todos", a, td); });
