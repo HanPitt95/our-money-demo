@@ -469,6 +469,19 @@ code.secret { word-break: break-all; font-size: 12px; background: var(--bg-faint
 .field input, .field select, .add-row input, .filters input, .filters select, .cost-form input, .sl-num input, .chat-form textarea { border-color: var(--border-input); }
 /* The app icon (house and seedling) is the logo on the sign-in card and the sidebar */
 .rail img.mark, .auth-card img.mark { display: block; background: none; border-radius: 0; }
+/* "Removed · Undo" note after a one-tap removal */
+.toast { position: fixed; left: 50%; transform: translateX(-50%); bottom: 24px; z-index: 30; display: flex; align-items: center; gap: 16px; max-width: calc(100vw - 32px); padding: 12px 18px; border-radius: 999px; background: #2b1f28; color: #fff; box-shadow: var(--shadow); font-size: 14px; }
+.toast span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.toast .link { color: #f7a8cd; font-weight: 600; flex-shrink: 0; padding: 6px 2px; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .toast { background: #f6eaf0; color: #2b1f28; } :root:not([data-theme="light"]) .toast .link { color: #b3005e; } }
+:root[data-theme="dark"] .toast { background: #f6eaf0; color: #2b1f28; }
+:root[data-theme="dark"] .toast .link { color: #b3005e; }
+@media (max-width: 640px) { .toast { bottom: calc(76px + env(safe-area-inset-bottom, 0px)); } }
+.not-bill { font-size: 12px; }
+.cost-name { background: none; border: 0; padding: 0; font: inherit; color: inherit; text-align: left; cursor: pointer; text-decoration: underline; text-decoration-color: var(--border-input); text-underline-offset: 3px; }
+.cost-name:hover { color: var(--brand-primary); }
+.nowrap { white-space: nowrap; }
+.due-list { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 2px; }
 </style>
 </head>
 <body>
@@ -490,6 +503,7 @@ code.secret { word-break: break-all; font-size: 12px; background: var(--bg-faint
     <div id="root"><p class="loading">Loading your figures…</p></div>
   </main>
 
+  <div class="toast" id="toast" role="status" aria-live="polite" hidden><span id="toastMsg"></span><button type="button" class="link" id="toastUndo">Undo</button></div>
   <nav class="bnav" aria-label="Main">
     <button data-page="home"><svg class="ico"><use href="#i-home"/></svg>Home</button>
     <button data-page="transactions"><svg class="ico"><use href="#i-list"/></svg>Spending</button>
@@ -790,6 +804,7 @@ code.secret { word-break: break-all; font-size: 12px; background: var(--bg-faint
     vals(S.txdocs).forEach(function (doc) {
       var acc = S.accounts[doc.acc]; if (!acc || !Array.isArray(doc.list)) return;
       doc.list.forEach(function (t, idx) {
+        if (t.x) return; // removed by hand: kept only so re-imports know to skip it
         var w = t.b && acc.spenders ? acc.spenders[t.b] : null;
         out.push({ d: t.d, a: t.a, m: t.m, k: t.k, c: t.c, o: t.o, h: t.h, w: w === "p1" || w === "p2" ? w : null, idx: idx, doc: doc.id, acc: doc.acc, accName: acc.name, owner: acc.owner || "joint", cat: effCat(t) });
       });
@@ -900,10 +915,12 @@ code.secret { word-break: break-all; font-size: 12px; background: var(--bg-faint
     if (!txs.length) {
       return html + '<div class="stack">' + emptyImport() + '<div class="grid g2">' + wealthGrowthCard() + goalsCard() + "</div>" + todosCard() + costsCard() + "</div>";
     }
-    var st = stats(inMonth(txs, m)), prev = stats(inMonth(txs, addMonths(m, -1)));
-    var change = prev.inc || prev.out ? st.net - prev.net : null;
-    var hero = '<div class="hero"><div class="row-between mb-md"><button type="button" class="hero-title" data-page="strategy">Net cashflow, ' + esc(monthLabel(m, "long")) + " " + icon("chev") + "</button>" +
-      (change != null ? '<span class="badge">' + (change >= 0 ? "↑ " : "↓ ") + gbp(change) + " vs " + esc(monthLabel(addMonths(m, -1))) + "</span>" : "") + "</div>" +
+    // A month still in progress is compared with the same point last month, not the whole of it
+    var soFar = m === monthKey(), day = new Date().getDate(), pm = addMonths(m, -1), prevAll = inMonth(txs, pm);
+    var st = stats(inMonth(txs, m)), prev = stats(soFar ? prevAll.filter(function (t) { return +t.d.slice(8, 10) <= day; }) : prevAll);
+    var change = prevAll.length ? st.net - prev.net : null;
+    var hero = '<div class="hero"><div class="row-between mb-md"><button type="button" class="hero-title" data-page="strategy">Net cashflow' + (soFar ? " so far" : "") + ", " + esc(monthLabel(m, "long")) + " " + icon("chev") + "</button>" +
+      (change != null ? '<span class="badge" title="' + (soFar ? "Compared with the first " + day + " days of " + esc(monthName(pm)) : "Compared with " + esc(monthName(pm))) + '">' + (change >= 0 ? "↑ " : "↓ ") + gbp(change) + (soFar ? " vs this time in " : " vs ") + esc(monthLabel(pm)) + "</span>" : "") + "</div>" +
       '<p class="big num">' + signed(st.net) + '</p><p class="sm mt-xs">Money in ' + gbp(st.inc) + ", money out " + gbp(st.out) + "</p>" + heroSpark(txs, m) + healthBlock(m, txs) + "</div>";
     html += '<div class="grid g3" style="margin-bottom:24px">' + hero + cashflowCard(txs, m) + wealthGrowthCard() + "</div>";
     html += '<div class="grid g3" style="margin-bottom:24px"><div class="span2">' + budgetCard(txs, m) + "</div>" + goalsCard() + "</div>";
@@ -957,8 +974,8 @@ code.secret { word-break: break-all; font-size: 12px; background: var(--bg-faint
     });
     svg += "</svg>";
     return '<div class="card chart"><div class="mb-md"><h2>Cashflow</h2><p class="sm muted mt-xs">Money in vs money out. Tap a month to see it.</p></div>' +
-      '<div class="grid g2 mb-md" style="gap:10px"><div class="tile row-between"><div><p class="sm muted">Money in</p><p class="num" style="font-size:17px;font-weight:600">' + gbp(cur.inc) + '</p></div><div class="icon-tile sm" style="color:var(--chart-in)">' + icon("arrowdown") + "</div></div>" +
-      '<div class="tile row-between"><div><p class="sm muted">Money out</p><p class="num" style="font-size:17px;font-weight:600">' + gbp(cur.out) + '</p></div><div class="icon-tile sm" style="color:var(--chart-out)">' + icon("arrowup") + "</div></div></div>" +
+      '<div class="grid g2 mb-md" style="gap:10px"><div class="tile row-between"><div><p class="sm muted">Money in' + (sel === monthKey() ? " so far" : "") + '</p><p class="num" style="font-size:17px;font-weight:600">' + gbp(cur.inc) + '</p></div><div class="icon-tile sm" style="color:var(--chart-in)">' + icon("arrowdown") + "</div></div>" +
+      '<div class="tile row-between"><div><p class="sm muted">Money out' + (sel === monthKey() ? " so far" : "") + '</p><p class="num" style="font-size:17px;font-weight:600">' + gbp(cur.out) + '</p></div><div class="icon-tile sm" style="color:var(--chart-out)">' + icon("arrowup") + "</div></div></div>" +
       '<div class="legend"><span><i style="background:var(--chart-in)"></i>In</span><span><i style="background:var(--chart-out)"></i>Out</span><span><i style="background:var(--text-primary);height:2px;width:14px"></i>Net</span></div>' + svg + "</div>";
   }
 
@@ -1028,8 +1045,15 @@ code.secret { word-break: break-all; font-size: 12px; background: var(--bg-faint
   }
 
   // ── Budgets by category ─────────────────────────────────────────────────
+  // Months to average over: the chosen month and the two before it. A month still in progress is
+  // left out (a few days would drag every average down), unless it's the only month there is.
+  function avgMonths(m) {
+    var have = txMonths(), back = m === monthKey() ? [1, 2, 3] : [0, 1, 2];
+    var ms = back.map(function (n) { return addMonths(m, -n); }).filter(function (k) { return have.indexOf(k) >= 0; });
+    return ms.length ? ms : have.indexOf(m) >= 0 ? [m] : [];
+  }
   function catAverages(txs, m) {
-    var have = txMonths(), ms = [m, addMonths(m, -1), addMonths(m, -2)].filter(function (k) { return have.indexOf(k) >= 0; }), avg = {};
+    var ms = avgMonths(m), avg = {};
     ms.forEach(function (k) { var s = stats(inMonth(txs, k)); Object.keys(s.byCat).forEach(function (c) { avg[c] = (avg[c] || 0) + s.byCat[c] / ms.length; }); });
     return avg;
   }
@@ -1056,7 +1080,7 @@ code.secret { word-break: break-all; font-size: 12px; background: var(--bg-faint
     var avg = catAverages(allTx(), currentMonth());
     openForm({
       title: "Monthly budgets",
-      fields: [{ type: "html", html: '<p class="sm muted">Set a monthly limit for the categories you want to keep an eye on. Leave the rest blank. The typical figure is your average over the last three months.</p>' }].concat(
+      fields: [{ type: "html", html: '<p class="sm muted">Set a monthly limit for the categories you want to keep an eye on. Leave the rest blank. The typical figure is your average over the last three full months.</p>' }].concat(
         SPEND_CATS.map(function (c) { return { name: "b_" + c, label: CAT[c].label + (avg[c] > 0 ? " (usually about " + gbp(avg[c]) + ")" : ""), type: "money", value: S.budgets[c] || "" }; })),
       onSave: function () {
         var map = {};
@@ -1082,11 +1106,31 @@ code.secret { word-break: break-all; font-size: 12px; background: var(--bg-faint
       '<button class="btn btn-primary" type="submit">' + icon("plus") + 'Add</button></form><p class="err" id="costErr" hidden></p>' : "";
     var list = costs.length ? '<div class="rows mb-lg">' + costs.map(function (c) {
       var badge = !c.when ? '<span class="badge default">Date to be confirmed</span>' : c.when < cur ? '<span class="badge warning">Was due ' + esc(monthLabel(c.when)) + "</span>" : '<span class="badge brand">' + esc(monthLabel(c.when, c.when.slice(0, 4) === cur.slice(0, 4) ? "" : "year")) + "</span>";
-      return '<div class="tx-row" style="cursor:default"><div class="main" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap"><span>' + esc(c.label) + "</span>" + badge + '</div><span class="amt">' + gbp(c.amount) + "</span>" +
+      return '<div class="tx-row" style="cursor:default"><div class="main" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">' + (S.canWrite ? '<button type="button" class="cost-name" data-cost-edit="' + esc(c.id) + '" aria-label="Edit ' + esc(c.label) + '">' + esc(c.label) + "</button>" : "<span>" + esc(c.label) + "</span>") + badge + '</div><span class="amt">' + gbp(c.amount) + "</span>" +
         (S.canWrite ? '<button class="icon-btn" data-cost-todo="' + esc(c.id) + '" aria-label="Add to to-do">' + icon("listplus") + '</button><button class="icon-btn" data-cost-del="' + esc(c.id) + '" aria-label="Remove ' + esc(c.label) + '">' + icon("x") + "</button>" : "") + "</div>";
     }).join("") + "</div>" : '<p class="muted mb-lg">Nothing planned yet. Add car services, birthdays, school trips, a new boiler: anything you can see coming.</p>';
     return '<div class="card"><div class="sec-head" style="align-items:flex-start"><div><h2>Upcoming costs and purchases</h2><p class="sm muted mt-xs">Plan ahead: add costs to forecast what\'s coming</p></div>' + (costs.length ? '<span class="badge brand">' + costs.length + " planned</span>" : "") + "</div>" + form + list +
       '<div class="tile row-between"><div class="row-between" style="gap:10px;justify-content:flex-start"><span class="brand">' + icon("up") + '</span><div><p class="muted">Estimated upcoming spend</p>' + (soon && soon !== total ? '<p class="sm faint">' + gbp(soon) + " of it in the next three months</p>" : "") + '</div></div><span class="big">' + gbp(total) + "</span></div></div>";
+  }
+
+  function openCost(id) {
+    var c = S.costs[id]; if (!c) return;
+    openForm({
+      title: "Edit " + c.label,
+      fields: [
+        { name: "label", label: "What's the cost?", value: c.label },
+        { name: "amount", label: "Estimate", type: "money", value: c.amount },
+        { name: "when", label: "When", type: "month", value: c.when || "", hint: "Leave blank if the date isn't known yet." }
+      ],
+      onSave: function () {
+        var lbl = gv("label").trim(), amt = parseMoney(gv("amount")), when = gv("when");
+        if (!lbl) { gErr("label", "Say what the cost is."); return false; }
+        if (amt == null || isNaN(amt) || amt <= 0) { gErr("amount", "Add an estimate, like 250."); return false; }
+        saveDoc("costs", id, Object.assign({}, c, { label: lbl.slice(0, 120), amount: amt, when: /^\d{4}-\d{2}$/.test(when) ? when : null }));
+      },
+      onDelete: function () { delDoc("costs", id); toast("Removed “" + c.label + "”", function () { saveDoc("costs", id, c); }); },
+      confirmLabel: "Delete for both of you"
+    });
   }
 
   // ── Manual transaction ──────────────────────────────────────────────────
@@ -1111,7 +1155,7 @@ code.secret { word-break: break-all; font-size: 12px; background: var(--bg-faint
         if (!/^\d{4}-\d{2}-\d{2}$/.test(d || "")) { gErr("date", "Pick a date."); return false; }
         var accId = gv("acc");
         if (accId === "__cash") { accId = newId("a"); saveDoc("accounts", accId, { name: "Cash", bank: "", owner: "joint", kind: "current", balance: null, createdAt: new Date().toISOString() }); }
-        var m = cleanDesc(desc) || desc.slice(0, 60), tx = { d: d, a: gv("dir") === "out" ? -Math.abs(amt) : Math.abs(amt), m: m, k: merchantKey(m), c: gv("cat"), h: hash("manual" + newId()) };
+        var m = cleanDesc(desc) || desc.slice(0, 60), tx = { d: d, a: gv("dir") === "out" ? -Math.abs(amt) : Math.abs(amt), m: m, k: merchantKey(m), c: gv("cat"), h: hash("manual" + newId()), u: 1 };
         var id = accId + "_" + d.slice(0, 7), ex = S.txdocs[id], list = ex && Array.isArray(ex.list) ? ex.list.slice() : [];
         list.push(tx); list.sort(function (x, y) { return x.d < y.d ? 1 : -1; });
         saveDoc("tx", id, { acc: accId, month: d.slice(0, 7), list: list }); S.month = d.slice(0, 7);
@@ -1336,13 +1380,30 @@ code.secret { word-break: break-all; font-size: 12px; background: var(--bg-faint
       }).join("") : (S.todoTag ? '<p class="muted">Nothing tagged ' + esc((tagById(S.todoTag) || {}).label || "") + ".</p>" : '<p class="muted">Nothing on the list. Add something, or add an upcoming bill.</p>')) + "</div>";
   }
 
+  // A short note after one-tap removals, with Undo, so a stray tap can be put right
+  var toastTimer = null, toastUndoFn = null;
+  function toast(msg, undo) {
+    var t = el("toast"); el("toastMsg").textContent = msg; el("toastUndo").hidden = !undo; toastUndoFn = undo || null;
+    t.hidden = false; clearTimeout(toastTimer); toastTimer = setTimeout(function () { t.hidden = true; toastUndoFn = null; }, 8000);
+  }
+  el("toastUndo").addEventListener("click", function () {
+    var f = toastUndoFn; toastUndoFn = null; el("toast").hidden = true; clearTimeout(toastTimer);
+    if (f && S.canWrite) { f(); render(); }
+  });
+  function billName(key) { var t = allTx().filter(function (x) { return x.k === key; })[0]; return t ? t.m : key; }
+  function hideBill(key) {
+    var name = billName(key);
+    S.billsIgnore = S.billsIgnore.concat([key]); saveMeta("bills", { ignore: S.billsIgnore });
+    toast("Hid " + name + " from bills", function () { S.billsIgnore = S.billsIgnore.filter(function (k) { return k !== key; }); saveMeta("bills", { ignore: S.billsIgnore }); });
+  }
   function billsCard() {
     var bills = upcomingBills().slice(0, 6);
     return '<div class="card"><div class="sec-head"><h2>Upcoming bills</h2>' + (bills.length ? '<span class="badge warning">' + bills.length + " due soon</span>" : "") + "</div>" +
       (bills.length ? '<div class="rows">' + bills.map(function (b) {
         var when = b.days < 0 ? "Usually by now" : b.days === 0 ? "Today" : b.days === 1 ? "Tomorrow" : "In " + b.days + " days";
-        return '<div class="tx-row" style="cursor:default"><div class="icon-tile sm">' + icon("receipt") + '</div><div class="main"><p>' + esc(b.name) + '</p><p class="sm muted">Around ' + esc(b.date.toLocaleDateString("en-GB", { day: "numeric", month: "short" })) + ", " + when.toLowerCase() + "</p></div>" +
-          '<span class="amt">' + gbp(b.amount, 2) + "</span>" + (S.canWrite ? '<button class="icon-btn" data-bill-todo="' + esc(b.key) + '" aria-label="Add to to-do">' + icon("listplus") + '</button><button class="icon-btn" data-bill-ignore="' + esc(b.key) + '" aria-label="Not a bill, hide it">' + icon("x") + "</button>" : "") + "</div>";
+        return '<div class="tx-row" style="cursor:default"><div class="icon-tile sm">' + icon("receipt") + '</div><div class="main"><p>' + esc(b.name) + '</p><p class="sm muted">Around ' + esc(b.date.toLocaleDateString("en-GB", { day: "numeric", month: "short" })) + ", " + when.toLowerCase() +
+          (S.canWrite ? '<span class="nowrap"> · <button type="button" class="link not-bill" data-bill-ignore="' + esc(b.key) + '" aria-label="' + esc(b.name) + ' is not a bill: hide it">Not a bill</button></span>' : "") + "</p></div>" +
+          '<span class="amt">' + gbp(b.amount, 2) + "</span>" + (S.canWrite ? '<button class="icon-btn" data-bill-todo="' + esc(b.key) + '" aria-label="Add to to-do">' + icon("listplus") + "</button>" : "") + "</div>";
       }).join("") + '</div><p class="sm faint mt-md">Spotted from payments that repeat each month at a similar amount.</p>'
         : '<p class="muted">Regular payments show up here once you\'ve imported two or more months of statements.</p>') + "</div>";
   }
@@ -1350,7 +1411,7 @@ code.secret { word-break: break-all; font-size: 12px; background: var(--bg-faint
   // ══ Financial health ═══════════════════════════════════════════════════
   function clamp(v) { return Math.max(0, Math.min(100, v)); }
   function health(m, txs) {
-    var have = txMonths(), months = [m, addMonths(m, -1), addMonths(m, -2)].filter(function (k) { return have.indexOf(k) >= 0; }), n = months.length || 1;
+    var months = avgMonths(m), n = months.length || 1, partial = months.length === 1 && months[0] === monthKey();
     var inc = 0, out = 0, byCat = {};
     months.forEach(function (k) { var s = stats(inMonth(txs, k)); inc += s.inc; out += s.out; Object.keys(s.byCat).forEach(function (c) { byCat[c] = (byCat[c] || 0) + s.byCat[c]; }); });
     inc /= n; out /= n; Object.keys(byCat).forEach(function (c) { byCat[c] /= n; });
@@ -1359,7 +1420,7 @@ code.secret { word-break: break-all; font-size: 12px; background: var(--bg-faint
 
     if (inc > 0) {
       var r = (inc - out) / inc * 100, need = Math.max(0, inc * 0.2 - (inc - out));
-      checks.push({ key: "save", w: 20, good: "You kept " + Math.round(r) + "% of income" + (months.length > 1 ? " over the last " + months.length + " months" : " this month") + ", above the 20% guide.", label: "Saving from income", value: (r < 0 ? "−" + Math.abs(Math.round(r)) : Math.round(r)) + "% of income kept", target: "20% or more", score: r >= 20 ? 100 : clamp(r / 20 * 70),
+      checks.push({ key: "save", w: 20, good: "You kept " + Math.round(r) + "% of income" + (months.length > 1 ? " over the last " + months.length + " full months" : partial ? " so far this month" : " that month") + ", above the 20% guide.", label: "Saving from income", value: (r < 0 ? "−" + Math.abs(Math.round(r)) : Math.round(r)) + "% of income kept", target: "20% or more", score: r >= 20 ? 100 : clamp(r / 20 * 70),
         source: "The 50/30/20 budgeting rule: half on needs, 30% on wants, 20% saved or used to clear debt.",
         step: r < 20 ? { icon: "wallet", title: "Keep 20% of what comes in", detail: "That's about " + gbp(inc * 0.2) + " a month, " + gbp(need) + " more than your recent average." } : null });
     }
@@ -1444,7 +1505,7 @@ code.secret { word-break: break-all; font-size: 12px; background: var(--bg-faint
     }
     var wsum = checks.reduce(function (s, c) { return s + c.w; }, 0);
     var score = wsum ? Math.round(checks.reduce(function (s, c) { return s + c.score * c.w; }, 0) / wsum) : null;
-    return { score: score, checks: checks, months: months.length };
+    return { score: score, checks: checks, months: months.length, partial: partial };
   }
   function healthLabel(sc) { return sc >= 80 ? "Looking strong" : sc >= 60 ? "Mostly on track" : sc >= 40 ? "A few pressure points" : "Needs some attention"; }
   function healthColour(sc) { return sc >= 70 ? "var(--success)" : sc >= 45 ? "var(--warning)" : "var(--danger)"; }
@@ -1466,7 +1527,7 @@ code.secret { word-break: break-all; font-size: 12px; background: var(--bg-faint
       return '<div class="ring-wrap"><div><p style="font-weight:600">Financial health</p><p class="sm mt-xs">Add a few months of statements and your balance sheet on the Wealth page, and a health score appears here, checked against UK rules of thumb.</p></div></div>';
     }
     var steps = hl.checks.filter(function (c) { return c.step; }).sort(function (a, b) { return a.score - b.score; }).slice(0, 3);
-    return '<div class="ring-wrap">' + gaugeSvg(hl.score, 120) + '<div><p class="sm">' + icon("sparkle") + ' Financial health</p><p style="font-weight:600;font-size:17px" class="mt-xs">' + healthLabel(hl.score) + '</p><p class="sm mt-xs">' + hl.checks.length + " checks, " + (hl.months > 1 ? "averaged over " + hl.months + " months" : "from one month so far") + '.</p><button class="link hero-link mt-xs" data-action="health">How it\'s worked out</button></div></div>' +
+    return '<div class="ring-wrap">' + gaugeSvg(hl.score, 120) + '<div><p class="sm">' + icon("sparkle") + ' Financial health</p><p style="font-weight:600;font-size:17px" class="mt-xs">' + healthLabel(hl.score) + '</p><p class="sm mt-xs">' + hl.checks.length + " checks, " + (hl.months > 1 ? "averaged over " + hl.months + " full months" : hl.partial ? "from this month so far" : "from one month") + '.</p><button class="link hero-link mt-xs" data-action="health">How it\'s worked out</button></div></div>' +
       (steps.length ? '<p class="sm" style="margin:16px 0 10px">Ways to improve it</p><ul class="steps">' + steps.map(function (c) {
         var added = stepAdded(c.step.title);
         return '<li><div class="step-ico">' + icon(c.step.icon) + '</div><div style="flex:1;min-width:0"><p style="font-weight:500">' + esc(c.step.title) + '</p><p class="sm">' + esc(c.step.detail) + "</p></div>" +
@@ -1530,13 +1591,28 @@ code.secret { word-break: break-all; font-size: 12px; background: var(--bg-faint
     accs.forEach(function (a) { if (a.balance == null) return; if (a.kind === "credit") cards = (cards || 0) + Math.abs(a.balance); else cash = (cash || 0) + a.balance; });
     return { cash: cash, cards: cards };
   }
+  // How up to date each account is: its latest payment, or its last Starling sync if that's newer
+  var freshCache = null, freshFor = null;
+  function accFresh() {
+    var txs = allTx(); if (freshCache && freshFor === txs) return freshCache;
+    var last = {}, out = {}, today = new Date(); today.setHours(12, 0, 0, 0);
+    txs.forEach(function (t) { if (!last[t.acc] || t.d > last[t.acc]) last[t.acc] = t.d; });
+    vals(S.accounts).forEach(function (a) {
+      var synced = a.syncedAt ? dayKey(new Date(a.syncedAt)) : "", day = synced > (last[a.id] || "") ? synced : (last[a.id] || "");
+      out[a.id] = day ? { day: day, synced: !!synced && synced === day, behind: (today - new Date(day + "T12:00:00")) / 864e5 > 7 } : null;
+    });
+    freshCache = out; freshFor = txs; return out;
+  }
+  function relDay(day) { var y = new Date(); y.setDate(y.getDate() - 1); return day === dayKey(new Date()) ? "today" : day === dayKey(y) ? "yesterday" : shortDate(day + "T12:00:00"); }
+  function freshText(f) { return !f ? "Nothing imported yet" : (f.synced ? "Synced " : "Payments up to ") + relDay(f.day); }
+  function freshLine(f) { return '<p class="sm mt-xs ' + (!f || f.behind ? "warn-text" : "faint") + '">' + esc(freshText(f)) + "</p>"; }
   function gbpOr(n) { return n == null ? "—" : (n < 0 ? "−" : "") + gbp(n); }
   function accCard(a) {
     var kinds = { current: ["Current", "default"], savings: ["Savings", "success"], credit: ["Credit card", "warning"] };
     var k = kinds[a.kind] || kinds.current;
     return '<button type="button" class="acc-card" data-acc="' + esc(a.id) + '"' + (S.canWrite ? ' aria-label="Edit ' + esc(a.name) + '"' : " disabled") + '><div class="row-between mb-lg" style="align-items:flex-start"><div style="min-width:0"><p style="font-weight:600">' + esc(a.name) + '</p><p class="sm muted mt-xs">' + esc([a.bank, ownerName(a.owner)].filter(Boolean).join(", ")) + '</p></div><span class="badge ' + k[1] + '">' + k[0] + "</span></div>" +
       '<p class="big" style="font-size:22px">' + (a.balance == null ? "—" : (a.kind === "credit" ? gbp2(Math.abs(a.balance)) : (a.balance < 0 ? "−" : "") + gbp2(a.balance))) + '</p><p class="sm faint mt-xs">' +
-      (a.balance == null ? "Balance not known" : (a.kind === "credit" ? "Owed" : "Balance") + (a.balanceAt ? " on " + esc(shortDate(a.balanceAt)) : "")) + "</p></button>";
+      (a.balance == null ? "Balance not known" : (a.kind === "credit" ? "Owed" : "Balance") + (a.balanceAt ? " on " + esc(shortDate(a.balanceAt)) : "")) + "</p>" + freshLine(accFresh()[a.id]) + "</button>";
   }
   function personTx(list, o) { return list.filter(function (t) { return t.owner === o || (o !== "joint" && t.w === o); }); }
   function jointShare(list, o) { return o === "joint" ? 0 : stats(list.filter(function (t) { return t.owner !== o && t.w === o; })).out; }
@@ -1555,10 +1631,12 @@ code.secret { word-break: break-all; font-size: 12px; background: var(--bg-faint
         kpiCard("In your accounts", gbpOr(at.cash), at.cash == null ? "Add balances to accounts" : "Latest known balances") + kpiCard("On credit cards", gbpOr(at.cards), at.cards == null ? "No card balances yet" : "Latest known balances") + "</div>";
       html += '<div class="grid g3">' + ["p1", "p2", "joint"].map(function (o) {
         var mine = accs.filter(function (a) { return (a.owner || "joint") === o; }), ms = stats(personTx(mtx, o)), js = jointShare(mtx, o), t2 = accTotals(mine);
+        var fr = accFresh(), oldest = mine.map(function (a) { return fr[a.id]; }).sort(function (x, y) { return !x ? -1 : !y ? 1 : x.day < y.day ? -1 : 1; })[0];
+        var notYet = mine.length && mine.every(function (a) { return !fr[a.id] || fr[a.id].day < m + "-01"; });
         var top = Object.keys(ms.byCat).filter(function (k) { return ms.byCat[k] > 0; }).sort(function (a, b) { return ms.byCat[b] - ms.byCat[a]; }).slice(0, 3);
-        return '<div class="card"><div class="row-between mb-lg"><div class="row-between" style="gap:12px;justify-content:flex-start"><div class="avatar">' + esc(o === "joint" ? "J" : ownerName(o).slice(0, 1).toUpperCase()) + '</div><div><p style="font-weight:600">' + esc(ownerName(o)) + '</p><p class="sm muted">' + mine.length + " account" + (mine.length === 1 ? "" : "s") + '</p></div></div><button class="btn btn-subtle" data-fam="' + o + '">View ' + icon("chev") + "</button></div>" +
+        return '<div class="card"><div class="row-between mb-lg"><div class="row-between" style="gap:12px;justify-content:flex-start"><div class="avatar">' + esc(o === "joint" ? "J" : ownerName(o).slice(0, 1).toUpperCase()) + '</div><div><p style="font-weight:600">' + esc(ownerName(o)) + '</p><p class="sm muted">' + mine.length + " account" + (mine.length === 1 ? "" : "s") + (mine.length ? ' · <span class="' + (!oldest || oldest.behind ? "warn-text" : "") + '">' + esc(oldest ? (mine.length > 1 ? "oldest up to " : "up to ") + relDay(oldest.day) : "nothing imported") + "</span>" : "") + '</p></div></div><button class="btn btn-subtle" data-fam="' + o + '">View ' + icon("chev") + "</button></div>" +
           '<div class="grid g2 mb-lg" style="gap:12px"><div class="tile"><p class="sm muted">Balances</p><p class="num" style="font-weight:600">' + gbpOr(t2.cash) + '</p></div><div class="tile"><p class="sm muted">Spent</p><p class="num" style="font-weight:600">' + gbp(ms.out) + "</p>" + (js >= 0.5 ? '<p class="sm faint">including ' + gbp(js) + " from joint</p>" : "") + "</div></div>" +
-          (top.length ? '<div class="stack" style="gap:10px">' + top.map(function (k) { return '<div><div class="row-between mb-xs"><span class="sm">' + esc(CAT[k].label) + '</span><span class="sm muted num">' + gbp(ms.byCat[k]) + "</span></div>" + bar(ms.out ? ms.byCat[k] / ms.out * 100 : 0) + "</div>"; }).join("") + "</div>" : '<p class="sm muted">No spending this month.</p>') + "</div>";
+          (top.length ? '<div class="stack" style="gap:10px">' + top.map(function (k) { return '<div><div class="row-between mb-xs"><span class="sm">' + esc(CAT[k].label) + '</span><span class="sm muted num">' + gbp(ms.byCat[k]) + "</span></div>" + bar(ms.out ? ms.byCat[k] / ms.out * 100 : 0) + "</div>"; }).join("") + "</div>" : '<p class="sm ' + (notYet ? "warn-text" : "muted") + '">' + (notYet ? "Nothing imported for " + esc(monthName(m)) + " yet." : "No spending this month.") + "</p>") + "</div>";
       }).join("") + "</div>";
       return html;
     }
@@ -1928,7 +2006,7 @@ code.secret { word-break: break-all; font-size: 12px; background: var(--bg-faint
   }
   function openAccount(id) {
     var a = S.accounts[id]; if (!a) return;
-    var n = vals(S.txdocs).filter(function (d) { return d.acc === id; }).reduce(function (s, d) { return s + (d.list || []).length; }, 0);
+    var n = vals(S.txdocs).filter(function (d) { return d.acc === id; }).reduce(function (s, d) { return s + (d.list || []).filter(function (t) { return !t.x; }).length; }, 0);
     openForm({
       title: "Edit " + a.name,
       fields: [
@@ -1956,24 +2034,65 @@ code.secret { word-break: break-all; font-size: 12px; background: var(--bg-faint
   function openTx(ref) {
     var p = ref.split("|"), doc = S.txdocs[p[0]]; if (!doc) return;
     var t = doc.list[+p[1]]; if (!t) return;
-    var acc = S.accounts[doc.acc] || {}, cur = effCat(t);
+    var acc = S.accounts[doc.acc] || {}, cur = effCat(t), mine = !!t.u;
+    // Find the payment again by its fingerprint, since the list may have changed since
+    function swap(docId, h, nt) {
+      var d = S.txdocs[docId]; if (!d) return;
+      var list = d.list.slice(), j = list.map(function (x) { return x.h; }).indexOf(h); if (j < 0) return;
+      if (nt) list[j] = nt; else list.splice(j, 1);
+      if (list.length) saveDoc("tx", docId, Object.assign({}, d, { list: list })); else delDoc("tx", docId);
+    }
+    var head = '<div class="tile"><div class="row-between"><span class="muted">' + esc(new Date(t.d + "T12:00:00").toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "long", year: "numeric" })) + '</span><span class="num ' + (t.a > 0 ? "pos" : "") + '" style="font-weight:600">' + (t.a > 0 ? "+" : "−") + gbp2(t.a) + '</span></div><p class="sm muted mt-xs">' + esc(acc.name || "") + "</p></div>";
+    var fields = mine ? [
+      { type: "html", html: '<p class="sm muted">You added this yourself, so you can change any of it.</p>' },
+      { name: "desc", label: "Description", value: t.m },
+      { name: "amount", label: "Amount", type: "money", value: Math.abs(t.a) },
+      { name: "dir", label: "Type", type: "select", value: t.a < 0 ? "out" : "in", options: [["out", "Money out"], ["in", "Money in"]] },
+      { name: "date", label: "Date", type: "date", value: t.d },
+      { name: "cat", label: "Category", type: "select", value: cur, options: CATS.map(function (c) { return [c[0], c[1]]; }) }
+    ] : [
+      { type: "html", html: head + '<p class="sm muted">A duplicate or a mistake? Remove it at the bottom. It stays out even if you import the same statement again.</p>' },
+      { name: "cat", label: "Category", type: "select", value: cur, options: CATS.map(function (c) { return [c[0], c[1]]; }) },
+      { name: "always", label: "Use this for everything from “" + (t.m || "").slice(0, 30) + "”", type: "checkbox", value: true }
+    ];
     openForm({
       title: t.m || "Transaction",
-      fields: [
-        { type: "html", html: '<div class="tile"><div class="row-between"><span class="muted">' + esc(new Date(t.d + "T12:00:00").toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "long", year: "numeric" })) + '</span><span class="num ' + (t.a > 0 ? "pos" : "") + '" style="font-weight:600">' + (t.a > 0 ? "+" : "−") + gbp2(t.a) + '</span></div><p class="sm muted mt-xs">' + esc(acc.name || "") + "</p></div>" },
-        { name: "cat", label: "Category", type: "select", value: cur, options: CATS.map(function (c) { return [c[0], c[1]]; }) },
-        { name: "always", label: "Use this for everything from “" + (t.m || "").slice(0, 30) + "”", type: "checkbox", value: true }
-      ],
+      fields: fields,
       onSave: function () {
+        if (mine) {
+          var desc = gv("desc").trim(), amt = parseMoney(gv("amount")), d = gv("date");
+          if (!desc) { gErr("desc", "Add a short description."); return false; }
+          if (amt == null || isNaN(amt) || amt <= 0) { gErr("amount", "Enter an amount, like 24.50."); return false; }
+          if (!/^\d{4}-\d{2}-\d{2}$/.test(d || "")) { gErr("date", "Pick a date."); return false; }
+          var m2 = cleanDesc(desc) || desc.slice(0, 60), nt = Object.assign({}, t, { d: d, a: gv("dir") === "out" ? -Math.abs(amt) : Math.abs(amt), m: m2, k: merchantKey(m2), c: gv("cat"), o: gv("cat") });
+          if (d.slice(0, 7) === t.d.slice(0, 7)) {
+            var d0 = S.txdocs[doc.id], l0 = d0.list.slice(), j0 = l0.map(function (x) { return x.h; }).indexOf(t.h); if (j0 < 0) return;
+            l0[j0] = nt; l0.sort(function (x, y) { return x.d < y.d ? 1 : -1; }); saveDoc("tx", doc.id, Object.assign({}, d0, { list: l0 }));
+          } else {
+            // A new month means a different monthly list
+            swap(doc.id, t.h, null);
+            var id2 = doc.acc + "_" + d.slice(0, 7), ex = S.txdocs[id2], l2 = ex && Array.isArray(ex.list) ? ex.list.slice() : [];
+            l2.push(nt); l2.sort(function (x, y) { return x.d < y.d ? 1 : -1; }); saveDoc("tx", id2, { acc: doc.acc, month: d.slice(0, 7), list: l2 }); S.month = d.slice(0, 7);
+          }
+          return dirtyTx();
+        }
         var cat = gv("cat"), always = gv("always");
         if (always) {
           var r = Object.assign({}, S.rules); r[t.k] = cat; S.rules = r; saveMeta("rules", { map: r });
-          if (t.o) { var list = doc.list.slice(); var nt = Object.assign({}, t); delete nt.o; list[+p[1]] = nt; saveDoc("tx", doc.id, Object.assign({}, doc, { list: list })); }
+          if (t.o) { var list = doc.list.slice(); var nt2 = Object.assign({}, t); delete nt2.o; list[+p[1]] = nt2; saveDoc("tx", doc.id, Object.assign({}, doc, { list: list })); }
         } else {
           var list2 = doc.list.slice(); list2[+p[1]] = Object.assign({}, t, { o: cat }); saveDoc("tx", doc.id, Object.assign({}, doc, { list: list2 }));
         }
         dirtyTx();
-      }
+      },
+      // Statement and synced payments are marked removed (so they don't come back); typed-in ones go for good
+      onDelete: function () {
+        var docId = doc.id;
+        if (mine) { swap(docId, t.h, null); toast("Removed “" + (t.m || "payment") + "”", function () { var d = S.txdocs[docId], l = d && Array.isArray(d.list) ? d.list.slice() : []; l.push(t); l.sort(function (x, y) { return x.d < y.d ? 1 : -1; }); saveDoc("tx", docId, { acc: doc.acc, month: t.d.slice(0, 7), list: l }); }); }
+        else { swap(docId, t.h, Object.assign({}, t, { x: 1 })); toast("Removed “" + (t.m || "payment") + "”", function () { swap(docId, t.h, t); }); }
+        dirtyTx();
+      },
+      deleteLabel: "Remove this payment", confirmLabel: "Remove it for both of you"
     });
   }
   function openSettings() {
@@ -1985,6 +2104,8 @@ code.secret { word-break: break-all; font-size: 12px; background: var(--bg-faint
         { name: "p1", label: "First person", value: S.household.p1 },
         { name: "p2", label: "Second person", value: S.household.p2 },
         { type: "html", html: '<div class="tile"><h3 class="mb-xs">What gets saved</h3><p class="sm muted">' + PRIVACY_NOTE + '</p></div>' +
+          (S.billsIgnore.length ? '<div class="tile"><h3 class="mb-xs">Hidden bills</h3><p class="sm muted mb-md">Payments you marked as not a bill. Show one again to put it back in Upcoming bills.</p><div class="stack" style="gap:8px">' +
+            S.billsIgnore.map(function (k) { return '<div class="row-between" style="gap:12px"><span>' + esc(billName(k)) + '</span>' + (S.canWrite ? '<button type="button" class="btn btn-subtle" data-bill-unhide="' + esc(k) + '">Show again</button>' : "") + "</div>"; }).join("") + "</div></div>" : "") +
           '<div class="tile"><h3 class="mb-xs">Backup</h3><p class="sm muted mb-md">Download everything as one file to keep safe' + (restoreBackup ? ", or restore from one." : ". You\'ll also use it to move to your own hosting.") + '</p><div class="head-actions"><button type="button" class="btn btn-neutral" data-backup="download">' + icon("arrowdown") + 'Download a backup</button>' +
           (restoreBackup && S.canWrite ? '<button type="button" class="btn btn-neutral" data-backup="restore">' + icon("upload") + 'Restore from a backup</button><input type="file" id="restoreFile" accept=".json,application/json" hidden>' : "") + "</div></div>" +
           (signOut ? '<div class="tile row-between" style="gap:12px"><div><h3 class="mb-xs">Sign out</h3><p class="sm muted">The app also signs you out by itself after ' + IDLE_MINUTES + ' minutes without use.</p></div><button type="button" class="btn btn-neutral" data-backup="signout">Sign out</button></div>' : "") +
@@ -2046,6 +2167,12 @@ code.secret { word-break: break-all; font-size: 12px; background: var(--bg-faint
     });
   }
   el("genBody").addEventListener("click", function (e) {
+    var u = e.target.closest("[data-bill-unhide]");
+    if (u && S.canWrite) {
+      var key = u.getAttribute("data-bill-unhide");
+      S.billsIgnore = S.billsIgnore.filter(function (k) { return k !== key; }); saveMeta("bills", { ignore: S.billsIgnore });
+      u.parentNode.innerHTML = "<span>" + esc(billName(key)) + '</span><span class="sm pos">Back in Upcoming bills</span>'; render(); return;
+    }
     var b = e.target.closest("[data-backup]"); if (!b) return;
     var a = b.getAttribute("data-backup");
     if (a === "download") downloadBackup();
@@ -2263,7 +2390,9 @@ code.secret { word-break: break-all; font-size: 12px; background: var(--bg-faint
     return { rows: out, bad: bad };
   }
   function openImport() {
-    IMP = null; iBody.innerHTML = (CFG.starling === false ? "" : '<div class="tile row-between st-tile"><div><p style="font-weight:600">Starling</p><p class="sm muted mt-xs">Bring in your Starling accounts automatically. It only reads, so nothing changes at Starling.</p></div><button type="button" class="btn btn-primary" data-st-sync>Sync now</button></div><p class="sm muted st-or">Or upload a statement from any bank</p>') + '<div class="drop"><p style="font-weight:600">Choose a CSV statement</p><p class="sm muted mt-xs">Download it from your banking app or website, usually under statements or exports. One account per file.</p><input type="file" id="impFile" accept=".csv,text/csv,text/plain"></div>' +
+    var fr = accFresh(), due = vals(S.accounts).filter(function (a) { return !a.starlingUid && (!fr[a.id] || fr[a.id].behind); });
+    var dueTile = due.length ? '<div class="tile"><p style="font-weight:600">Due a newer statement</p><ul class="due-list sm muted mt-xs">' + due.map(function (a) { return "<li>" + esc(a.name) + ": " + esc(freshText(fr[a.id]).replace(/^Payments/, "payments").replace(/^Nothing/, "nothing")) + "</li>"; }).join("") + "</ul></div>" : "";
+    IMP = null; iBody.innerHTML = dueTile + (CFG.starling === false ? "" : '<div class="tile row-between st-tile"><div><p style="font-weight:600">Starling</p><p class="sm muted mt-xs">Bring in your Starling accounts automatically. It only reads, so nothing changes at Starling.</p></div><button type="button" class="btn btn-primary" data-st-sync>Sync now</button></div><p class="sm muted st-or">Or upload a statement from any bank</p>') + '<div class="drop"><p style="font-weight:600">Choose a CSV statement</p><p class="sm muted mt-xs">Download it from your banking app or website, usually under statements or exports. One account per file.</p><input type="file" id="impFile" accept=".csv,text/csv,text/plain"></div>' +
       '<p class="sm muted">The file is read on this device. Only the date, amount, a tidied description and a category are saved. Account numbers, sort codes and long reference numbers are removed first.</p>';
     iFoot.innerHTML = '<div class="right"><button type="button" class="btn btn-neutral" data-close>Cancel</button></div>';
     iDlg.showModal();
@@ -2272,7 +2401,7 @@ code.secret { word-break: break-all; font-size: 12px; background: var(--bg-faint
       if (file.size > 5e6) { alert("That file is over 5 MB. Export a shorter date range and try again."); return; }
       var rd = new FileReader();
       rd.onload = function () {
-        try { var rows = parseCSV(String(rd.result)); if (rows.length < 2) throw new Error("empty"); IMP = analyse(rows); IMP.fileName = file.name; IMP.acc = vals(S.accounts).length ? vals(S.accounts)[0].id : "new"; IMP.newAcc = { name: "", bank: "", owner: "p1", kind: "current" }; renderImport(); }
+        try { var rows = parseCSV(String(rd.result)); if (rows.length < 2) throw new Error("empty"); IMP = analyse(rows); IMP.fileName = file.name; IMP.acc = vals(S.accounts).length ? "" : "new"; IMP.newAcc = { name: "", bank: "", owner: "p1", kind: "current" }; renderImport(); }
         catch (err) { iBody.innerHTML = '<p class="err" style="font-size:14px">That file couldn\'t be read as a statement. Check it\'s a CSV export rather than a PDF, then try again.</p>'; }
       };
       rd.readAsText(file);
@@ -2286,7 +2415,7 @@ code.secret { word-break: break-all; font-size: 12px; background: var(--bg-faint
     var accs = vals(S.accounts), b = buildRows(), rows = b.rows;
     var dates = rows.map(function (r) { return r.d; }).sort();
     var html = '<p class="sm muted">' + esc(IMP.fileName) + ": " + rows.length + " transactions" + (dates.length ? " from " + esc(txDate(dates[0])) + " " + dates[0].slice(0, 4) + " to " + esc(txDate(dates[dates.length - 1])) + " " + dates[dates.length - 1].slice(0, 4) : "") + (b.bad ? ", " + b.bad + " rows skipped" : "") + "</p>";
-    html += '<div class="field"><label for="imp-acc">Which account is this?</label><select id="imp-acc" data-imp="acc">' + accs.map(function (a) { return '<option value="' + esc(a.id) + '"' + (IMP.acc === a.id ? " selected" : "") + ">" + esc(a.name) + " (" + esc(ownerName(a.owner)) + ")</option>"; }).join("") + '<option value="new"' + (IMP.acc === "new" ? " selected" : "") + ">A new account…</option></select></div>";
+    html += '<div class="field"><label for="imp-acc">Which account is this?</label><select id="imp-acc" data-imp="acc">' + (IMP.acc === "" ? '<option value="" selected disabled>Choose an account…</option>' : "") + accs.map(function (a) { return '<option value="' + esc(a.id) + '"' + (IMP.acc === a.id ? " selected" : "") + ">" + esc(a.name) + " (" + esc(ownerName(a.owner)) + ")</option>"; }).join("") + '<option value="new"' + (IMP.acc === "new" ? " selected" : "") + ">A new account…</option></select></div>";
     if (IMP.acc === "new") {
       html += '<div class="two"><div class="field"><label for="imp-name">Account name</label><input id="imp-name" data-imp-new="name" value="' + esc(IMP.newAcc.name) + '" placeholder="e.g. Sam\'s Monzo"><p class="err" id="imp-name-err" hidden>Give the account a name.</p></div><div class="field"><label for="imp-bank">Bank</label><input id="imp-bank" data-imp-new="bank" value="' + esc(IMP.newAcc.bank) + '"></div></div>' +
         '<div class="two"><div class="field"><label for="imp-owner">Whose is it?</label><select id="imp-owner" data-imp-new="owner">' + [["p1", S.household.p1], ["p2", S.household.p2], ["joint", "Joint"]].map(function (o) { return '<option value="' + o[0] + '"' + (IMP.newAcc.owner === o[0] ? " selected" : "") + ">" + esc(o[1]) + "</option>"; }).join("") + "</select></div>" +
@@ -2302,7 +2431,7 @@ code.secret { word-break: break-all; font-size: 12px; background: var(--bg-faint
       return "<tr><td>" + esc(txDate(r.d)) + '</td><td class="desc">' + esc(r.m) + "</td><td>" + esc(CAT[r.c].label) + '</td><td style="text-align:right" class="num ' + (r.a > 0 ? "pos" : "") + '">' + (r.a > 0 ? "+" : "−") + gbp2(r.a) + "</td></tr>";
     }).join("") + '</tbody></table></div><p class="sm muted">Check that spending shows as −£ and money in as +£. You can fix categories after importing.</p>' : '<p class="err" style="font-size:14px">No transactions found with these columns. Open Columns above and pick the right ones.</p>';
     iBody.innerHTML = html;
-    iFoot.innerHTML = '<div class="right"><button type="button" class="btn btn-neutral" data-close>Cancel</button><button type="button" class="btn btn-primary" data-imp-go' + (rows.length ? "" : " disabled") + ">Import " + rows.length + " transactions</button></div>";
+    iFoot.innerHTML = '<div class="right"><button type="button" class="btn btn-neutral" data-close>Cancel</button><button type="button" class="btn btn-primary" data-imp-go' + (rows.length && IMP.acc !== "" ? "" : " disabled") + ">Import " + rows.length + " transactions</button></div>";
   }
   iBody.addEventListener("change", function (e) {
     var t = e.target; if (!IMP) return;
@@ -2317,12 +2446,13 @@ code.secret { word-break: break-all; font-size: 12px; background: var(--bg-faint
   iBody.addEventListener("input", function (e) { var t = e.target; if (IMP && t.hasAttribute("data-imp-new")) IMP.newAcc[t.getAttribute("data-imp-new")] = t.value; });
   iFoot.addEventListener("click", function (e) { if (e.target.closest("[data-imp-go]")) doImport(); });
   function doImport() {
-    var b = buildRows(), rows = b.rows; if (!rows.length) return;
-    var accId = IMP.acc, acc;
+    var b = buildRows(), rows = b.rows; if (!rows.length || !IMP.acc || !S.canWrite) return;
+    var accId = IMP.acc, acc, undo = { docs: {} };
     if (accId === "new") {
       var nm = IMP.newAcc.name.trim(); if (!nm) { var er = el("imp-name-err"); if (er) { er.hidden = false; el("imp-name").focus(); } return; }
-      accId = newId("a"); acc = { name: nm, bank: IMP.newAcc.bank.trim(), owner: IMP.newAcc.owner, kind: IMP.newAcc.kind, createdAt: new Date().toISOString(), balance: null };
-    } else acc = Object.assign({}, S.accounts[accId]);
+      accId = newId("a"); undo.newAcc = true; acc = { name: nm, bank: IMP.newAcc.bank.trim(), owner: IMP.newAcc.owner, kind: IMP.newAcc.kind, createdAt: new Date().toISOString(), balance: null };
+    } else { acc = Object.assign({}, S.accounts[accId]); undo.prevAcc = Object.assign({}, S.accounts[accId]); }
+    undo.accId = accId;
     var seen = {}, byMonth = {};
     rows.forEach(function (r) {
       var base = accId + "|" + r.d + "|" + r.a + "|" + r.raw; seen[base] = (seen[base] || 0) + 1;
@@ -2333,7 +2463,7 @@ code.secret { word-break: break-all; font-size: 12px; background: var(--bg-faint
     Object.keys(byMonth).sort().forEach(function (mk) {
       var id = accId + "_" + mk, ex = S.txdocs[id], list = ex && Array.isArray(ex.list) ? ex.list.slice() : [], have = {};
       list.forEach(function (t) { have[t.h] = 1; });
-      byMonth[mk].forEach(function (t) { if (have[t.h]) skipped++; else { list.push(t); added++; } });
+      byMonth[mk].forEach(function (t) { if (have[t.h]) skipped++; else { list.push(t); added++; (undo.docs[id] = undo.docs[id] || []).push(t.h); } });
       if (!ex || list.length !== ex.list.length) { list.sort(function (x, y) { return x.d < y.d ? 1 : -1; }); saveDoc("tx", id, { acc: accId, month: mk, list: list }); }
     });
     if (IMP.map.bal >= 0) {
@@ -2349,9 +2479,27 @@ code.secret { word-break: break-all; font-size: 12px; background: var(--bg-faint
     var months = Object.keys(byMonth).sort(); S.month = months[months.length - 1];
     iBody.innerHTML = '<div class="ok-box"><p style="font-weight:600">Imported ' + added + " transaction" + (added === 1 ? "" : "s") + " into " + esc(acc.name) + ".</p>" + (skipped ? '<p class="sm mt-xs">' + skipped + " were already here, so they were skipped.</p>" : "") + "</div>" +
       '<p class="sm muted">Spot something in the wrong category? Tap it in Spending to change it, and choose whether to apply that to everything from the same place.</p>';
+    IMP.undo = added ? undo : null;
+    iFoot.innerHTML = (added ? '<button type="button" class="btn btn-subtle" data-imp-undo>Undo this import</button>' : "") + '<div class="right"><button type="button" class="btn btn-neutral" data-imp-again>Import another</button><button type="button" class="btn btn-primary" data-close>Done</button></div>';
+    render();
+  }
+  // Takes back exactly what an import added, and puts the account back as it was
+  function undoImport() {
+    var u = IMP && IMP.undo; if (!u || !S.canWrite) return;
+    Object.keys(u.docs).forEach(function (id) {
+      var d = S.txdocs[id]; if (!d) return;
+      var gone = {}; u.docs[id].forEach(function (h) { gone[h] = 1; });
+      var list = (d.list || []).filter(function (t) { return !gone[t.h]; });
+      if (list.length) saveDoc("tx", id, Object.assign({}, d, { list: list })); else delDoc("tx", id);
+    });
+    if (u.newAcc) { if (!vals(S.txdocs).some(function (d) { return d.acc === u.accId; })) delDoc("accounts", u.accId); }
+    else if (u.prevAcc) saveDoc("accounts", u.accId, u.prevAcc);
+    IMP.undo = null;
+    iBody.innerHTML = '<div class="ok-box"><p style="font-weight:600">Import undone.</p><p class="sm mt-xs">Nothing from ' + esc(IMP.fileName) + " was kept.</p></div>";
     iFoot.innerHTML = '<div class="right"><button type="button" class="btn btn-neutral" data-imp-again>Import another</button><button type="button" class="btn btn-primary" data-close>Done</button></div>';
     render();
   }
+  iFoot.addEventListener("click", function (e) { if (e.target.closest("[data-imp-undo]")) undoImport(); });
   iFoot.addEventListener("click", function (e) { if (e.target.closest("[data-imp-again]")) openImport(); });
 
   // ── Starling sync ─────────────────────────────────────────────────────
@@ -2531,9 +2679,9 @@ code.secret { word-break: break-all; font-size: 12px; background: var(--bg-faint
     var ms = txMonths().slice(-6);
     if (ms.length) {
       L.push("\nCASHFLOW BY MONTH (excluding transfers between own accounts):");
-      ms.forEach(function (k) { var s = stats(inMonth(txs, k)); L.push("- " + monthLabel(k, "year") + ": in " + gbp(s.inc) + ", out " + gbp(s.out) + ", net " + signed(s.net)); });
+      ms.forEach(function (k) { var s = stats(inMonth(txs, k)); L.push("- " + monthLabel(k, "year") + (k === monthKey() ? " (so far, " + new Date().getDate() + " days in)" : "") + ": in " + gbp(s.inc) + ", out " + gbp(s.out) + ", net " + signed(s.net)); });
       var avg = catAverages(txs, m), cats = Object.keys(avg).filter(function (k) { return avg[k] > 0; }).sort(function (a, b) { return avg[b] - avg[a]; });
-      L.push("\nAVERAGE MONTHLY SPENDING BY CATEGORY (last 3 months):");
+      L.push("\nAVERAGE MONTHLY SPENDING BY CATEGORY (last " + avgMonths(m).length + " full months):");
       cats.forEach(function (k) { L.push("- " + CAT[k].label + ": " + gbp(avg[k]) + (S.budgets[k] ? " (budget " + gbp(S.budgets[k]) + ")" : "")); });
       var bills = upcomingBills();
       if (bills.length) { L.push("\nREGULAR BILLS DUE SOON:"); bills.forEach(function (b) { L.push("- " + b.name + ": about " + gbp(b.amount, 2) + " around " + b.date.toLocaleDateString("en-GB", { day: "numeric", month: "short" })); }); }
@@ -2648,7 +2796,7 @@ code.secret { word-break: break-all; font-size: 12px; background: var(--bg-faint
     d.addEventListener("click", function (e) { if (e.target.closest("[data-close]") || e.target === d) d.close(); });
   });
   document.addEventListener("click", function (e) {
-    var t = e.target.closest("[data-page],[data-action],[data-tx],[data-acc],[data-goal],[data-stab],[data-wg],[data-cost-del],[data-cost-todo],[data-witem],[data-wtab],[data-wfilter],[data-wbx],[data-wbrange],[data-fam],[data-go-tx],[data-pick-month],[data-todo-del],[data-todo-filter],[data-bill-todo],[data-bill-ignore],[data-step-todo]");
+    var t = e.target.closest("[data-page],[data-action],[data-tx],[data-acc],[data-goal],[data-stab],[data-wg],[data-cost-del],[data-cost-edit],[data-cost-todo],[data-witem],[data-wtab],[data-wfilter],[data-wbx],[data-wbrange],[data-fam],[data-go-tx],[data-pick-month],[data-todo-del],[data-todo-filter],[data-bill-todo],[data-bill-ignore],[data-step-todo]");
     if (!t || t.closest("dialog")) return;
     var a;
     if ((a = t.getAttribute("data-page")) !== null) return go(a);
@@ -2671,7 +2819,12 @@ code.secret { word-break: break-all; font-size: 12px; background: var(--bg-faint
     if ((a = t.getAttribute("data-acc")) !== null) return S.canWrite && openAccount(a);
     if ((a = t.getAttribute("data-stab")) !== null) { S.model.tab = a; return render(); }
     if ((a = t.getAttribute("data-wg")) !== null) { S.wgSel = a; return render(); }
-    if ((a = t.getAttribute("data-cost-del")) !== null) { if (S.canWrite) { delDoc("costs", a); render(); } return; }
+    if ((a = t.getAttribute("data-cost-del")) !== null) {
+      var cd = S.costs[a]; if (!cd || !S.canWrite) return;
+      delDoc("costs", a); toast("Removed “" + cd.label + "”", function () { saveDoc("costs", a, cd); });
+      return render();
+    }
+    if ((a = t.getAttribute("data-cost-edit")) !== null) return S.canWrite && openCost(a);
     if ((a = t.getAttribute("data-cost-todo")) !== null) {
       var cst = S.costs[a]; if (!cst || !S.canWrite) return;
       var cl = cst.label + ", about " + gbp(cst.amount) + (cst.when ? " (" + monthLabel(cst.when, "long") + ")" : "");
@@ -2687,7 +2840,11 @@ code.secret { word-break: break-all; font-size: 12px; background: var(--bg-faint
     if ((a = t.getAttribute("data-fam")) !== null) { S.famTab = a; render(); return window.scrollTo(0, 0); }
     if ((a = t.getAttribute("data-go-tx")) !== null) { S.txq = { q: "", month: null, who: a || "all", cat: "all", acc: "all" }; return go("transactions"); }
     if ((a = t.getAttribute("data-pick-month")) !== null) { S.month = a; return render(); }
-    if ((a = t.getAttribute("data-todo-del")) !== null) { delDoc("todos", a); return render(); }
+    if ((a = t.getAttribute("data-todo-del")) !== null) {
+      var td = S.todos[a]; if (!td || !S.canWrite) return;
+      delDoc("todos", a); toast("Removed “" + td.label + "”", function () { saveDoc("todos", a, td); });
+      return render();
+    }
     if ((a = t.getAttribute("data-todo-filter")) !== null) { S.todoTag = S.todoTag === a ? "" : a; S.todoAddTag = ""; return render(); }
     if ((a = t.getAttribute("data-bill-todo")) !== null) {
       var bill = upcomingBills().filter(function (b) { return b.key === a; })[0]; if (!bill) return;
@@ -2700,7 +2857,7 @@ code.secret { word-break: break-all; font-size: 12px; background: var(--bg-faint
       if (hc && !stepAdded(hc.step.title)) saveDoc("todos", newId("t"), { label: hc.step.title, done: false, who: "", createdAt: new Date().toISOString() });
       return render();
     }
-    if ((a = t.getAttribute("data-bill-ignore")) !== null) { S.billsIgnore = S.billsIgnore.concat([a]); saveMeta("bills", { ignore: S.billsIgnore }); return render(); }
+    if ((a = t.getAttribute("data-bill-ignore")) !== null) { if (S.canWrite) hideBill(a); return render(); }
   });
   document.addEventListener("change", function (e) {
     var t = e.target; if (t.closest("dialog")) return;
