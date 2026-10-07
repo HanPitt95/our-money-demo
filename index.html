@@ -941,8 +941,8 @@ code.secret { word-break: break-all; font-size: 12px; background: var(--bg-faint
       '<span class="amt ' + (pos ? "pos" : "") + '">' + (pos ? "+" : "−") + gbp2(t.a) + "</span></button>";
   }
   function emptyImport(msg) {
-    return '<div class="card"><h2 class="mb-md">Bring in your transactions</h2><p class="muted mb-lg">' + (msg || "Download a CSV statement from each of your banking apps or websites and import it here. Most UK banks offer this under statements or exports.") + "</p>" +
-      (S.canWrite ? '<button class="btn btn-primary" data-action="import">' + icon("upload") + "Import a CSV</button>" : "") + "</div>";
+    return '<div class="card"><h2 class="mb-md">Bring in your transactions</h2><p class="muted mb-lg">' + (msg || "Download a statement from each of your banking apps or websites and import it here. A CSV is best if your bank offers one; PDF statements work too.") + "</p>" +
+      (S.canWrite ? '<button class="btn btn-primary" data-action="import">' + icon("upload") + "Import a statement</button>" : "") + "</div>";
   }
 
   // ══ Page: Home ═════════════════════════════════════════════════════════
@@ -2261,7 +2261,7 @@ code.secret { word-break: break-all; font-size: 12px; background: var(--bg-faint
   }
 
   // ══ Backup ═════════════════════════════════════════════════════════════
-  var PRIVACY_NOTE = "From statements: the date, amount, a tidied description and a category. Account numbers, sort codes, card numbers and long reference numbers are stripped out before anything is saved. The CSV file itself is never stored. Only the two of you, signed in with two-factor, can see or change anything.";
+  var PRIVACY_NOTE = "From statements: the date, amount, a tidied description and a category. Account numbers, sort codes, card numbers and long reference numbers are stripped out before anything is saved. The statement file itself is never stored or sent anywhere. Only the two of you, signed in with two-factor, can see or change anything.";
   var restoreBackup = null, signOut = null, pushTile = null, pushClick = null;
   function buildBackup() {
     var docs = {};
@@ -2500,25 +2500,376 @@ code.secret { word-break: break-all; font-size: 12px; background: var(--bg-faint
       var a;
       if (IMP.mode === "amount") { a = parseMoney(r[m.amount]); if (a == null || isNaN(a)) { bad++; return; } if (IMP.flip) a = -a; }
       else { var o = m.out >= 0 ? parseMoney(r[m.out]) : 0, i = m.in_ >= 0 ? parseMoney(r[m.in_]) : 0; o = o && !isNaN(o) ? Math.abs(o) : 0; i = i && !isNaN(i) ? Math.abs(i) : 0; if (!o && !i) { bad++; return; } a = Math.round((i - o) * 100) / 100; }
-      var raw = m.desc >= 0 ? r[m.desc] : "", desc = cleanDesc(raw) || "Unknown";
+      var raw = m.desc >= 0 ? r[m.desc] : "", desc = cleanDesc(IMP.tidy ? IMP.tidy(raw) : raw) || "Unknown";
       out.push({ d: d, a: a, raw: raw, m: desc, k: merchantKey(desc), c: guessCat(raw, a, m.cat >= 0 ? r[m.cat] : null), bal: m.bal >= 0 ? parseMoney(r[m.bal]) : null });
     });
     return { rows: out, bad: bad };
   }
+  // ── PDF statements ────────────────────────────────────────────────────
+  // Some banks (NatWest, for one) only give PDF statements. A PDF is read on this device with
+  // Mozilla's pdf.js (vendor/pdfjs), which only loads when a PDF is picked. It gives back each
+  // bit of text with where it sits on the page, so the statement's table is laid out again from
+  // that: the header row says where each column is. The rows then go through the same steps as
+  // a CSV. The file is never sent anywhere or kept.
+  var pdfLib = null;
+  function loadPdfLib() {
+    if (S.mode === "demo") return Promise.reject({ code: "demo" });
+    if (!pdfLib) pdfLib = import(new URL("vendor/pdfjs/pdf.min.js", document.baseURI).href).then(function (lib) {
+      lib.GlobalWorkerOptions.workerSrc = new URL("vendor/pdfjs/pdf.worker.min.js", document.baseURI).href;
+      return lib;
+    }, function () { pdfLib = null; throw { code: "reader" }; });
+    return pdfLib;
+  }
+  // Each page's text as {x, y, w, h, s}, measured from the top left, in reading order
+  function pdfPages(lib, buf) {
+    var task = lib.getDocument({ data: buf, isEvalSupported: false, disableFontFace: true, useSystemFonts: false, enableXfa: false, stopAtErrors: false });
+    function done() { try { task.destroy(); } catch (e) { /* already gone */ } }
+    return task.promise.then(function (doc) {
+      var pages = [], n = Math.min(doc.numPages, 60), p = 0;
+      function next() {
+        if (++p > n) return pages;
+        return doc.getPage(p).then(function (page) {
+          var vp = page.getViewport({ scale: 1 });
+          return page.getTextContent().then(function (tc) {
+            pages.push(tc.items.reduce(function (out, it) {
+              if (!it.str || !it.str.trim()) return out;
+              var t = lib.Util.transform(vp.transform, it.transform);
+              if (t[0] <= 0 || Math.abs(t[1]) > 0.01 || Math.abs(t[2]) > 0.01) return out; // turned text sits in the margins, not the table
+              out.push({ x: t[4], y: t[5], w: it.width, h: Math.abs(t[3]) || 8, s: it.str });
+              return out;
+            }, []));
+            return next();
+          });
+        });
+      }
+      return next();
+    }).then(function (pages) { done(); return pages; }, function (err) {
+      done(); throw { code: err && err.name === "PasswordException" ? "password" : "unreadable" };
+    });
+  }
+  var PDF_AMT = /^([\-−–]\s?)?\(?\s?([\-−–]\s?)?£?\s?((?:\d{1,3}(?:,\d{3})+|\d+)\.\d{2})\s?\)?\s?(cr|dr|od|[\-−–])?$/i, PDF_MARK = /^(cr|dr|od)$/i;
+  var PDF_DMY = /^(\d{1,2})(?:st|nd|rd|th)?[ \-\/.]?(jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|june?|july?|aug(?:ust)?|sept?(?:ember)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\.?(?:[ \-\/.,]*(\d{4}|\d{2})(?![\d.,:]))?(?![a-z])/i;
+  var PDF_NUM = /^(\d{1,2})[\/\-](\d{1,2})(?:[\/\-](\d{4}|\d{2}))?(?![\d\/\-.,:])|^(\d{1,2})\.(\d{1,2})\.(\d{4}|\d{2})(?![\d.,:])/;
+  function pdfAmt(s) {
+    var t = s.trim(), m = t.match(PDF_AMT); if (!m) return null;
+    var suf = (m[4] || "").toLowerCase();
+    var dr = suf === "dr" || suf === "od";
+    return { v: +m[3].replace(/,/g, ""), neg: !!(dr || m[1] || m[2] || /^[\-−–]$/.test(suf) || /^\(.*\)$/.test(t)), cr: suf === "cr", dr: dr };
+  }
+  // A date at the start of some text: "02 Sep 2026", "2 SEP", "02SEP26", "02/09/2026", "2026-09-02". The year can be missing.
+  function pdfDate(s) {
+    var m, y, mo, d;
+    if ((m = s.match(/^(\d{4})-(\d{2})-(\d{2})(?!\d)/))) { y = m[1]; mo = +m[2]; d = +m[3]; }
+    else if ((m = s.match(PDF_DMY))) { d = +m[1]; mo = MON[m[2].toLowerCase().slice(0, 3)]; y = m[3]; }
+    else if ((m = s.match(PDF_NUM))) { d = +(m[1] || m[4]); mo = +(m[2] || m[5]); y = m[3] || m[6]; }
+    else return null;
+    y = y ? +y : null; if (y != null && y < 100) y += 2000;
+    if (!mo || mo > 12 || !d || d > 31 || (y != null && (y < 1990 || y > 2100))) return null;
+    return { y: y, mo: mo, d: d, len: m[0].length };
+  }
+  function pdfRole(s) {
+    s = s.toLowerCase().replace(/[^a-z ]+/g, " ").replace(/\s+/g, " ").trim();
+    if (/\bbalance\b/.test(s)) return "bal";
+    if (/\bdate\b/.test(s)) return "date";
+    if (/^(paid in|money in|in|credits?|deposits?|receipts?)\b/.test(s)) return "in";
+    if (/^(paid out|money out|out|withdrawn|withdrawals?|debits?|payments?|spent)\b/.test(s)) return "out";
+    if (/^(amount|value)\b/.test(s)) return "amt";
+    if (/\b(description|details|particulars|narrative|transactions?|payee|merchant|reference|type)\b/.test(s)) return "desc";
+    return null;
+  }
+  // Groups a page's text into lines, and each line into cells. Amounts always stand alone,
+  // so a long description can't swallow the number beside it.
+  function pdfLines(items) {
+    var lines = [];
+    items.slice().sort(function (a, b) { return a.y - b.y || a.x - b.x; }).forEach(function (it) {
+      var ln = lines[lines.length - 1];
+      if (ln && it.y - ln.y <= Math.max(1.5, Math.min(it.h, ln.h) * 0.45)) ln.items.push(it);
+      else lines.push({ y: it.y, h: it.h, items: [it] });
+    });
+    lines.forEach(function (ln) {
+      var parts = [], cells = [];
+      ln.items.sort(function (a, b) { return a.x - b.x; }).forEach(function (it) {
+        var s = it.s.replace(/[\u00a0\t]/g, " "), cw = it.w / Math.max(1, s.length), re = /\S+(?: \S+)*/g, m;
+        while ((m = re.exec(s))) parts.push({ x0: it.x + m.index * cw, x1: it.x + (m.index + m[0].length) * cw, s: m[0], h: it.h });
+      });
+      parts.forEach(function (p) {
+        var c = cells[cells.length - 1], alone = pdfAmt(p.s) || PDF_MARK.test(p.s);
+        if (c && !alone && !c.alone && p.x0 - c.x1 < Math.max(c.h, p.h) * 0.8) { c.s += (p.x0 - c.x1 > Math.max(c.h, p.h) * 0.12 ? " " : "") + p.s; c.x1 = Math.max(c.x1, p.x1); }
+        else cells.push({ x0: p.x0, x1: p.x1, s: p.s, h: p.h, alone: !!alone });
+      });
+      ln.cells = cells;
+    });
+    return lines;
+  }
+  function pdfHeader(ln) {
+    if (ln.cells.length < 3) return null;
+    var cols = {}, amts = [];
+    ln.cells.forEach(function (c) {
+      if (c.s.length > 30) return;
+      var r = pdfRole(c.s); if (!r) return;
+      if (r === "date") { if (!cols.date && /^((transaction|trans|posting|posted|value|entry) )?date( posted)?$/.test(c.s.toLowerCase().replace(/[^a-z ]+/g, " ").replace(/\s+/g, " ").trim())) cols.date = c; }
+      else if (r === "desc") { if (!cols.desc) cols.desc = c; }
+      else if (!amts.some(function (a) { return a.role === r; })) amts.push({ role: r, x0: c.x0, x1: c.x1 });
+    });
+    if (!cols.date || !(amts.length >= 2 || amts.some(function (a) { return a.role === "amt"; }))) return null;
+    if (!amts.every(function (a) { return a.x0 > cols.date.x1; })) return null;
+    amts.sort(function (a, b) { return a.x0 - b.x0; });
+    return { date: cols.date, dateLeft: cols.date.x0, descX: cols.desc && cols.desc.x0 > cols.date.x0 ? cols.desc.x0 : null, amts: amts, amtLeft: amts[0].x0 };
+  }
+  // Which column an amount sits in. Numbers line up on one edge, so first look for that:
+  // one tight group of edges per column. Otherwise go by overlap with the header.
+  function pdfAssign(toks, amts) {
+    function groups(key) {
+      var xs = toks.map(function (t) { return t[key]; }).sort(function (a, b) { return a - b; }), g = [];
+      xs.forEach(function (x) { var l = g[g.length - 1]; if (l && x - l.hi <= 6) l.hi = x; else g.push({ lo: x, hi: x }); });
+      return g;
+    }
+    var best = null;
+    ["x1", "x0"].forEach(function (key) { var g = groups(key); if (!best && g.length === amts.length) best = { key: key, g: g }; });
+    toks.forEach(function (t) {
+      if (best) { for (var i = 0; i < best.g.length; i++) if (t[best.key] >= best.g[i].lo && t[best.key] <= best.g[i].hi) { t.role = amts[i].role; return; } }
+      var pick = null, score = -Infinity;
+      amts.forEach(function (a) {
+        var ov = Math.min(t.x1, a.x1) - Math.max(t.x0, a.x0), sc = ov > 0 ? ov : -Math.min(Math.abs(t.x1 - a.x1), Math.abs((t.x0 + t.x1) / 2 - (a.x0 + a.x1) / 2));
+        if (sc > score) { score = sc; pick = a; }
+      });
+      t.role = pick.role;
+    });
+  }
+  var PDF_BAL_LINE = /brought forward|carried forward|\b[bc]\/f\b|balance (brought|carried|forward)|(opening|closing|start(ing)?|end(ing)?|previous) balance|balance (at|on) (the )?(start|end)/i;
+  var PDF_TOTAL = /^(totals?|sub ?totals?)( (paid in|paid out|money in|money out|in|out|payments?|receipts?|credits?|debits?|withdrawn|for (this|the) (period|statement|month)))?:?$/i;
+  function pdfIso(y, mo, d) { return y + "-" + String(mo).padStart(2, "0") + "-" + String(d).padStart(2, "0"); }
+  // The statement as rows for analyse(): [["Date","Description","Paid in","Paid out","Balance"], ...]
+  function pdfStatement(pages) {
+    if (!pages.some(function (p) { return p.length; })) throw { code: "image" };
+    var entries = [], hdrs = [], docDates = [];
+    pages.forEach(function (items, pi) {
+      var hdr = hdrs.length ? hdrs[hdrs.length - 1] : null, fresh = false, stopped = false, last = null, took = 0;
+      var lines = pdfLines(items), skip = -1;
+      lines.forEach(function (ln, li) {
+        if (li <= skip) return;
+        var all = ln.cells.map(function (c) { return c.s; }).join(" "), dm, re = /\b(\d{1,2})(?:st|nd|rd|th)? ?(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?,? (\d{4})\b|\b(\d{1,2})\/(\d{1,2})\/(\d{4})\b/gi;
+        while ((dm = re.exec(all))) docDates.push(dm[3] ? pdfIso(+dm[3], MON[dm[2].toLowerCase()], +dm[1]) : pdfIso(+dm[6], +dm[5], +dm[4]));
+        // Headings can run over two or three lines, like "Paid" above "in (£)"
+        var h = pdfHeader(ln), two = ln, plain = function (l) { return !l.cells.some(function (c) { return c.alone || pdfDate(c.s); }); };
+        for (var k = 1; k <= 2 && plain(ln); k++) {
+          var nx = lines[li + k]; if (!nx || nx.y - lines[li + k - 1].y > ln.h * 2 || !plain(nx)) break;
+          two = { cells: two.cells.map(function (c) { return { x0: c.x0, x1: c.x1, s: c.s }; }) };
+          nx.cells.forEach(function (c) {
+            var on = two.cells.filter(function (t) { return Math.min(t.x1, c.x1) - Math.max(t.x0, c.x0) > -4; })[0];
+            if (on) { on.s += " " + c.s; on.x0 = Math.min(on.x0, c.x0); on.x1 = Math.max(on.x1, c.x1); } else two.cells.push({ x0: c.x0, x1: c.x1, s: c.s });
+          });
+          two.cells.sort(function (a, b) { return a.x0 - b.x0; });
+          var h2 = pdfHeader(two);
+          if (h2 && (!h || h2.amts.length > h.amts.length)) { h = h2; skip = li + k; }
+        }
+        if (h) { hdr = h; hdrs.push(h); fresh = true; stopped = false; last = lines[Math.max(li, skip)]; took = 0; return; }
+        if (!hdr || stopped) return; // above the first header, or after the table ended on this page
+        var date = null, text = [], toks = [], first = ln.cells[0];
+        ln.cells.forEach(function (c, ci) {
+          var a = c.alone ? pdfAmt(c.s) : null;
+          if (a && c.x1 > hdr.amtLeft - 0.5) { toks.push({ x0: c.x0, x1: c.x1, a: a }); return; }
+          if (PDF_MARK.test(c.s) && toks.length && c.x0 - toks[toks.length - 1].x1 < c.h * 2) { var p = toks[toks.length - 1].a, mk = c.s.toLowerCase(); p.cr = mk === "cr"; p.dr = p.neg = mk !== "cr"; return; }
+          if (ci === 0 && c.x0 < (hdr.descX != null ? hdr.descX - 1 : Infinity) && c.x0 <= hdr.dateLeft + 12) {
+            var dt = pdfDate(c.s);
+            if (dt) { date = dt; var rest = c.s.slice(dt.len).trim(); if (rest) text.push(rest); return; }
+          }
+          if (ci === 1 && date && !text.length && c.x0 < (hdr.descX != null ? hdr.descX - 1 : -Infinity)) { var d2 = pdfDate(c.s); if (d2 && d2.len === c.s.length) return; } // a second date column
+          if (c.x0 < hdr.amtLeft) text.push(c.s);
+        });
+        var txt = text.join(" ").replace(/\s+/g, " ").trim();
+        if (took && last && ln.y - last.y > Math.max(ln.h * 3.4, 30)) { stopped = true; return; } // a big gap: the table has ended
+        if (!date && PDF_TOTAL.test(txt)) { if (took) stopped = true; return; }
+        if (!toks.length && !date) {
+          if (!txt) return; // page numbers and the like
+          if (first.x0 <= hdr.dateLeft + 3) { if (took) stopped = true; return; } // text back at the left margin: a footer
+        }
+        if (!fresh && !took && !toks.length) return; // top of a page without a header: wait for the first payment
+        if (date) hdr.dateLeft = Math.min(hdr.dateLeft, first.x0);
+        last = ln; took++;
+        entries.push({ page: pi, y: ln.y, date: date, text: txt, hdr: hdr, toks: toks });
+      });
+    });
+    hdrs.forEach(function (h) {
+      var toks = []; entries.forEach(function (e) { if (e.hdr === h) toks = toks.concat(e.toks); });
+      if (toks.length) pdfAssign(toks, h.amts);
+    });
+    entries.forEach(function (e) {
+      e.amts = e.toks.filter(function (t) { return t.role !== "bal"; });
+      e.bal = e.toks.filter(function (t) { return t.role === "bal"; }).pop() || null;
+      e.kind = PDF_BAL_LINE.test(e.text) && (!e.amts.length || !/[a-z]{3,}/i.test(e.text.replace(/\b(balance|brought|carried|forward|opening|closing|start(ing)?|end(ing)?|previous|b\/f|c\/f|at|on|the|of|period|statement)\b/gi, ""))) ? "mark" : e.amts.length ? "txn" : e.bal ? "mark" : "text";
+    });
+    if (!hdrs.length || !entries.some(function (e) { return e.kind === "txn"; })) throw { code: "notable" };
+    // Descriptions over more than one line: do the extra lines belong to the payment above or below?
+    // A date starts a payment. Otherwise a wider gap marks the edge between rows, and failing
+    // that, go with what most of the statement does.
+    var groups = [], run = [];
+    entries.forEach(function (e, i) {
+      if (e.kind === "text") { run.push(i); return; }
+      if (run.length) groups.push({ ids: run, prev: i - run.length - 1, next: i }); run = [];
+    });
+    if (run.length) groups.push({ ids: run, prev: entries.length - run.length - 1, next: -1 });
+    var vote = 0;
+    groups.forEach(function (g) {
+      var P = entries[g.prev], N = entries[g.next], f = entries[g.ids[0]], l = entries[g.ids[g.ids.length - 1]], dated = -1;
+      g.split = null;
+      g.ids.forEach(function (id, k) { if (dated < 0 && entries[id].date) dated = k; });
+      if (dated >= 0) { g.split = dated; vote += 2; return; }
+      if (!P || P.kind !== "txn") { g.split = 0; return; }
+      if (!N || N.kind !== "txn") { g.split = g.ids.length; return; }
+      if (P.page !== f.page) { vote++; return; }
+      if (N.page !== l.page) { vote--; return; }
+      var gaps = [f.y - P.y]; for (var k = 1; k < g.ids.length; k++) gaps.push(entries[g.ids[k]].y - entries[g.ids[k - 1]].y); gaps.push(N.y - l.y);
+      var mx = Math.max.apply(null, gaps), at = gaps.indexOf(mx), rest = Math.max.apply(null, gaps.filter(function (x, j) { return j !== at; }));
+      if (mx > rest * 1.15 + 0.5) { g.split = at; vote += at === 0 ? 1 : at === g.ids.length ? -1 : 0; }
+    });
+    var att = {};
+    groups.forEach(function (g) {
+      var split = g.split != null ? g.split : vote > 0 ? 0 : g.ids.length;
+      g.ids.forEach(function (id, k) { var to = k < split ? g.prev : g.next; if (to >= 0) (att[to] = att[to] || []).push(id); });
+    });
+    // Each payment's text and date. Rows without a date share the one above.
+    var txs = [], lastDate = null;
+    entries.forEach(function (e, i) {
+      if (e.kind === "text") return;
+      var pre = [], post = [], dated = e.date;
+      (att[i] || []).forEach(function (j) { var t = entries[j]; if (j < i) { pre.push(t); if (t.date && !dated) dated = t.date; } else post.push(t); });
+      if (dated) lastDate = dated;
+      if (e.kind === "mark") { if (e.bal) txs.push({ mark: true, date: lastDate, bal: e.bal.a }); return; }
+      txs.push({ date: lastDate, text: pre.concat([e], post).map(function (t) { return t.text; }).filter(Boolean).join(" "), amts: e.amts, bal: e.bal ? e.bal.a : null });
+    });
+    // Newest first or oldest first?
+    var dd = txs.filter(function (t) { return t.date; }), up = 0, down = 0;
+    for (var q = 1; q < dd.length; q++) {
+      var A = dd[q - 1].date, B = dd[q].date, ka = A.mo * 32 + A.d, kb = B.mo * 32 + B.d;
+      if (Math.abs(A.mo - B.mo) < 6 && kb !== ka) { if (kb > ka) up++; else down++; }
+    }
+    var asc = up >= down;
+    // Years: from the rows themselves, else from a date elsewhere on the statement, else today
+    if (dd.length) {
+      var start = -1, y;
+      dd.forEach(function (t, k) { if (start < 0 && t.date.y) start = k; });
+      if (start >= 0) y = dd[start].date.y;
+      else {
+        var now = new Date(), cap = dayKey(new Date(now.getTime() + 31 * 864e5)), endD = docDates.filter(function (k) { return k <= cap; }).sort().pop() || dayKey(now);
+        start = asc ? dd.length - 1 : 0;
+        y = dd[start].date.mo <= +endD.slice(5, 7) ? +endD.slice(0, 4) : +endD.slice(0, 4) - 1;
+      }
+      var walk = function (from, step) {
+        var cy = y, cm = dd[from].date.mo, later = (step > 0) === asc;
+        for (var k = from; k >= 0 && k < dd.length; k += step) {
+          var dt = dd[k].date;
+          if (dt.y && k !== from) cy = dt.y;
+          else if (!dt.y && later && cm - dt.mo >= 6) cy++;
+          else if (!dt.y && !later && dt.mo - cm >= 6) cy--;
+          cm = dt.mo; dd[k].iso = pdfIso(k === from ? y : cy, dt.mo, dt.d);
+        }
+      };
+      walk(start, 1); walk(start, -1);
+    }
+    // Money in or out. Separate columns say so. One Amount column uses minus signs, or CR for money in.
+    var anyCR = false, anyNeg = false, split = false;
+    txs.forEach(function (t) { (t.amts || []).forEach(function (x) { if (x.role === "amt") { if (x.a.cr) anyCR = true; if (x.a.neg) anyNeg = true; } else split = true; }); });
+    var unsure = !split && !anyCR && !anyNeg;
+    txs.forEach(function (t) {
+      t.bal = t.bal ? (t.bal.neg ? -t.bal.v : t.bal.v) : null;
+      if (t.mark) return;
+      var v = 0, amt = t.amts.filter(function (x) { return x.role === "amt"; }).pop();
+      t.amts.forEach(function (x) { if (x.role === "in") v += x.a.v; else if (x.role === "out") v -= x.a.v; });
+      if (amt) { var a = amt.a; v += a.cr ? a.v : a.dr || a.neg || anyCR || unsure ? -a.v : a.v; }
+      t.a = Math.round(v * 100) / 100;
+    });
+    // Check against the running balance, oldest first. A payment that only adds up the other
+    // way round is turned round; anything else is counted so it can be flagged.
+    var chron = asc ? txs : txs.slice().reverse(), segs = [], prev = null, cur = [];
+    chron.forEach(function (t) {
+      if (!t.mark) cur.push(t);
+      if (t.bal != null) { if (prev != null && cur.length) segs.push({ from: prev, to: t.bal, txs: cur }); prev = t.bal; cur = []; }
+    });
+    function fits(sg, dir) { return Math.abs(sg.from + dir * sg.txs.reduce(function (s, t) { return s + t.a; }, 0) - sg.to) < 0.005; }
+    var dir = !unsure && segs.filter(function (s) { return fits(s, -1); }).length > segs.filter(function (s) { return fits(s, 1); }).length ? -1 : 1;
+    var info = { pages: pages.length, checked: segs.length, mismatched: 0, fixed: 0, noBalance: !segs.length };
+    segs.forEach(function (sg) {
+      if (fits(sg, dir)) return;
+      var n = sg.txs.length, found = 0, count = 0;
+      if (n <= 10) for (var mask = 0; mask < (1 << n) && count < 2; mask++) {
+        var s = 0; for (var b = 0; b < n; b++) s += (mask >> b & 1 ? 1 : -1) * Math.abs(sg.txs[b].a);
+        if (Math.abs(sg.from + dir * s - sg.to) < 0.005) { count++; found = mask; }
+      }
+      if (count !== 1) { info.mismatched++; return; }
+      sg.txs.forEach(function (t, b) { var v = (found >> b & 1 ? 1 : -1) * Math.abs(t.a); if (v !== t.a) { t.a = v; info.fixed++; } });
+    });
+    if (segs.length) unsure = false;
+    var out = txs.filter(function (t) { return !t.mark && t.iso && t.a; });
+    info.skipped = txs.filter(function (t) { return !t.mark; }).length - out.length;
+    var head = unsure ? ["Date", "Description", "Amount", "Balance"] : ["Date", "Description", "Paid in", "Paid out", "Balance"];
+    return { unsure: unsure, info: info, rows: [head].concat(out.map(function (t) {
+      var b = t.bal != null ? t.bal.toFixed(2) : "";
+      return unsure ? [t.iso, t.text, Math.abs(t.a).toFixed(2), b] : [t.iso, t.text, t.a > 0 ? t.a.toFixed(2) : "", t.a < 0 ? (-t.a).toFixed(2) : "", b];
+    })) };
+  }
+  // Tidies how a PDF payment reads: NatWest puts the card's last four digits and a date code
+  // ("1234 01SEP26 C") and the payment type before the shop's name.
+  function pdfTidy(s) {
+    var t = String(s || "").replace(/\s+/g, " ")
+      .replace(/\b\d{4} \d{1,2}[a-z]{3}\d{2}(?: [a-z]{1,2}\b)?/gi, " ")
+      .replace(/\b\d{1,2}[a-z]{3}\d{2}\b/gi, " ")
+      .replace(/\s*,\s*/g, " ").replace(/\s+/g, " ").trim();
+    var u = t.replace(/^(card transaction|card payment|contactless payment|contactless|debit card payment|online transaction|online payment|online banking|mobile payment|faster payment|bill payment|direct debit|standing order|automated credit)\b[\s:\-]*/i, "");
+    return /[a-z]/i.test(u) ? u : t;
+  }
+  var impSeq = 0;
+  function readPdf(file, seq) {
+    iBody.innerHTML = '<p class="sm muted" role="status">Reading ' + esc(file.name) + "…</p>";
+    var buf;
+    file.arrayBuffer().then(function (b) { buf = b; return loadPdfLib(); })
+      .then(function (lib) { return pdfPages(lib, buf); })
+      .then(function (pages) {
+        if (seq !== impSeq || !iDlg.open) return;
+        var st = pdfStatement(pages);
+        IMP = analyse(st.rows); IMP.flip = st.unsure ? IMP.flip : false; IMP.pdf = st.info; IMP.tidy = pdfTidy;
+        IMP.fileName = file.name; IMP.acc = vals(S.accounts).length ? "" : "new"; IMP.newAcc = { name: "", bank: "", owner: "p1", kind: "current" };
+        renderImport();
+      })
+      .catch(function (err) {
+        if (seq !== impSeq || !iDlg.open) return;
+        var code = err && err.code, msg = {
+          demo: "In the real app, PDF statements are read right here on the device. This demo leaves that part out, so try a CSV instead.",
+          reader: "The PDF reader couldn't load. Check you're online, then try again.",
+          password: "This PDF has a password, so it can't be read. Save a copy without the password and try again.",
+          image: "This PDF is a picture of a statement, so there's no text to read. Download it from your bank's website instead, or use a CSV.",
+          notable: "No list of payments was found in this PDF. It works with statements that have a table of dates and amounts. If your bank offers a CSV, try that instead."
+        }[code] || "That PDF couldn't be opened. It might be damaged, so try downloading it again.";
+        if (!code) console.warn("PDF import failed", err);
+        impError(msg);
+      });
+  }
+  function impError(msg) {
+    iBody.innerHTML = '<p class="err" style="font-size:14px" role="alert">' + esc(msg) + "</p>";
+    iFoot.innerHTML = '<div class="right"><button type="button" class="btn btn-neutral" data-close>Cancel</button><button type="button" class="btn btn-primary" data-imp-again>Choose another file</button></div>';
+  }
+  function pdfNote(p) {
+    if (p.noBalance) return '<p class="sm muted">This statement has no running balance to check against, so give the amounts a quick look.</p>';
+    if (p.mismatched) return '<p class="sm warn-text" role="status">' + p.mismatched + (p.mismatched === 1 ? " place" : " places") + " in this statement didn't add up against its running balance, so a payment might be missing or the wrong way round. Have a look after importing.</p>";
+    return '<p class="sm muted" role="status">Checked against the statement\'s running balance: it all adds up.</p>';
+  }
   function openImport() {
     var fr = accFresh(), due = vals(S.accounts).filter(function (a) { return !a.starlingUid && (!fr[a.id] || fr[a.id].behind); });
     var dueTile = due.length ? '<div class="tile"><p style="font-weight:600">Due a newer statement</p><ul class="due-list sm muted mt-xs">' + due.map(function (a) { return "<li>" + esc(a.name) + ": " + esc(freshText(fr[a.id]).replace(/^Payments/, "payments").replace(/^Nothing/, "nothing")) + "</li>"; }).join("") + "</ul></div>" : "";
-    IMP = null; iBody.innerHTML = dueTile + (CFG.starling === false ? "" : '<div class="tile row-between st-tile"><div><p style="font-weight:600">Starling</p><p class="sm muted mt-xs">Bring in your Starling accounts automatically. It only reads, so nothing changes at Starling.</p></div><button type="button" class="btn btn-primary" data-st-sync>Sync now</button></div><p class="sm muted st-or">Or upload a statement from any bank</p>') + '<div class="drop"><p style="font-weight:600">Choose a CSV statement</p><p class="sm muted mt-xs">Download it from your banking app or website, usually under statements or exports. One account per file.</p><input type="file" id="impFile" accept=".csv,text/csv,text/plain"></div>' +
+    IMP = null; impSeq++; iBody.innerHTML = dueTile + (CFG.starling === false ? "" : '<div class="tile row-between st-tile"><div><p style="font-weight:600">Starling</p><p class="sm muted mt-xs">Bring in your Starling accounts automatically. It only reads, so nothing changes at Starling.</p></div><button type="button" class="btn btn-primary" data-st-sync>Sync now</button></div><p class="sm muted st-or">Or upload a statement from any bank</p>') + '<div class="drop"><p style="font-weight:600">Choose a statement</p><p class="sm muted mt-xs">A CSV or PDF from your banking app or website, usually under statements or exports. One account per file.</p><input type="file" id="impFile" accept=".csv,.pdf,text/csv,text/plain,application/pdf"></div>' +
       '<p class="sm muted">The file is read on this device. Only the date, amount, a tidied description and a category are saved. Account numbers, sort codes and long reference numbers are removed first.</p>';
     iFoot.innerHTML = '<div class="right"><button type="button" class="btn btn-neutral" data-close>Cancel</button></div>';
     iDlg.showModal();
     el("impFile").addEventListener("change", function (e) {
       var file = e.target.files[0]; if (!file) return;
-      if (file.size > 5e6) { alert("That file is over 5 MB. Export a shorter date range and try again."); return; }
+      var pdf = /\.pdf$/i.test(file.name) || file.type === "application/pdf", seq = ++impSeq;
+      if (file.size > (pdf ? 10e6 : 5e6)) { alert("That file is over " + (pdf ? 10 : 5) + " MB. Choose a shorter date range and try again."); return; }
+      if (pdf) { readPdf(file, seq); return; }
       var rd = new FileReader();
       rd.onload = function () {
+        if (seq !== impSeq) return;
         try { var rows = parseCSV(String(rd.result)); if (rows.length < 2) throw new Error("empty"); IMP = analyse(rows); IMP.fileName = file.name; IMP.acc = vals(S.accounts).length ? "" : "new"; IMP.newAcc = { name: "", bank: "", owner: "p1", kind: "current" }; renderImport(); }
-        catch (err) { iBody.innerHTML = '<p class="err" style="font-size:14px">That file couldn\'t be read as a statement. Check it\'s a CSV export rather than a PDF, then try again.</p>'; }
+        catch (err) { impError("That file couldn't be read as a statement. Check it's a CSV or PDF from your bank, then try again."); }
       };
       rd.readAsText(file);
     });
@@ -2530,7 +2881,7 @@ code.secret { word-break: break-all; font-size: 12px; background: var(--bg-faint
   function renderImport() {
     var accs = vals(S.accounts), b = buildRows(), rows = b.rows;
     var dates = rows.map(function (r) { return r.d; }).sort();
-    var html = '<p class="sm muted">' + esc(IMP.fileName) + ": " + rows.length + " transactions" + (dates.length ? " from " + esc(txDate(dates[0])) + " " + dates[0].slice(0, 4) + " to " + esc(txDate(dates[dates.length - 1])) + " " + dates[dates.length - 1].slice(0, 4) : "") + (b.bad ? ", " + b.bad + " rows skipped" : "") + "</p>";
+    var html = '<p class="sm muted">' + esc(IMP.fileName) + ": " + rows.length + " transactions" + (dates.length ? " from " + esc(txDate(dates[0])) + " " + dates[0].slice(0, 4) + " to " + esc(txDate(dates[dates.length - 1])) + " " + dates[dates.length - 1].slice(0, 4) : "") + (b.bad + (IMP.pdf ? IMP.pdf.skipped : 0) ? ", " + (b.bad + (IMP.pdf ? IMP.pdf.skipped : 0)) + " rows skipped" : "") + "</p>" + (IMP.pdf && rows.length ? pdfNote(IMP.pdf) : "");
     html += '<div class="field"><label for="imp-acc">Which account is this?</label><select id="imp-acc" data-imp="acc">' + (IMP.acc === "" ? '<option value="" selected disabled>Choose an account…</option>' : "") + accs.map(function (a) { return '<option value="' + esc(a.id) + '"' + (IMP.acc === a.id ? " selected" : "") + ">" + esc(a.name) + " (" + esc(ownerName(a.owner)) + ")</option>"; }).join("") + '<option value="new"' + (IMP.acc === "new" ? " selected" : "") + ">A new account…</option></select></div>";
     if (IMP.acc === "new") {
       html += '<div class="two"><div class="field"><label for="imp-name">Account name</label><input id="imp-name" data-imp-new="name" value="' + esc(IMP.newAcc.name) + '" placeholder="e.g. Sam\'s Monzo"><p class="err" id="imp-name-err" hidden>Give the account a name.</p></div><div class="field"><label for="imp-bank">Bank</label><input id="imp-bank" data-imp-new="bank" value="' + esc(IMP.newAcc.bank) + '"></div></div>' +
