@@ -339,9 +339,14 @@ dialog::backdrop { background: rgba(20, 5, 77, 0.35); }
 .tag-filter[aria-pressed="true"] { background: var(--pastel-tile); color: var(--brand-primary); border-color: var(--brand-secondary); }
 .tag-filter[aria-pressed="true"] .num { color: var(--brand-primary); }
 @media (max-width: 640px) {
-  /* On phones the to-do gets its own line, with its tag and who-picker underneath */
-  .todo label { flex: 1 1 100%; }
-  .todo .tag-pick { margin-left: 28px; }
+  /* On phones the to-do gets its own line, with its tag, who-picker and remove button underneath.
+     The pickers can shrink a little, so that line never breaks in two. */
+  .todo { display: grid; grid-template-columns: 20px minmax(0, max-content) minmax(0, max-content) 1fr; gap: 6px 8px; }
+  .todo label { grid-column: 1 / -1; }
+  .todo .tag-pick { grid-column: 2; min-width: 0; }
+  .todo > select { grid-column: 3; }
+  .todo .tag-pick select, .todo > select { max-width: 100%; min-width: 0; }
+  .todo > .icon-btn { grid-column: 4; justify-self: end; }
   .add-row { flex-wrap: wrap; }
   .card .add-row input { flex: 1 1 100%; }
   .card .add-row .tag-pick { flex: 1; }
@@ -396,7 +401,6 @@ dialog.wide { width: min(640px, calc(100vw - 24px)); }
   .g4 .card { padding: 14px; } .g4 .big { font-size: 19px; }
   .hero .big { font-size: 30px; }
   .checks { grid-template-columns: 1fr; }
-  .todo { flex-wrap: wrap; }
 }
 
 .bar > span.over { background: var(--danger); }
@@ -496,6 +500,12 @@ code.secret { word-break: break-all; font-size: 12px; background: var(--bg-faint
 .cost-name:hover { color: var(--brand-primary); }
 .nowrap { white-space: nowrap; }
 .due-list { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 2px; }
+
+/* Phones zoom the whole page in when you tap a box whose text is under 16px, and stay zoomed
+   (it happened at every sign-in). On touch screens every box, list and picker uses 16px. */
+@media (pointer: coarse) {
+  body :is(input:not([type=checkbox]):not([type=radio]):not([type=range]), select, textarea) { font-size: 16px; }
+}
 </style>
 </head>
 <body>
