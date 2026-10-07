@@ -1679,7 +1679,7 @@ code.secret { word-break: break-all; font-size: 12px; background: var(--bg-faint
       title: "Your details for tax", saveLabel: "Save",
       fields: [{ type: "html", html: '<p class="sm muted">Used only to estimate your tax. It\'s saved like everything else, so only the two of you can see it.</p>' }]
         .concat(person("p1"), person("p2"), [{ type: "html", html: '<h3 class="mt-md">Children</h3>' },
-          { name: "kids", label: "Children's first names (optional)", value: kids, placeholder: "e.g. Nora", hint: "For Child Benefit and childcare tips. Separate names with commas." },
+          { name: "kids", label: "Children's first names (optional)", value: kids, placeholder: "e.g. Ruby, Max", hint: "For Child Benefit and childcare tips. Separate names with commas." },
           { name: "cb", label: "We claim Child Benefit", type: "checkbox", value: d.childBenefit }]),
       onSave: function () {
         if (!S.canWrite) return;
