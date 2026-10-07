@@ -506,6 +506,16 @@ code.secret { word-break: break-all; font-size: 12px; background: var(--bg-faint
 @media (pointer: coarse) {
   body :is(input:not([type=checkbox]):not([type=radio]):not([type=range]), select, textarea) { font-size: 16px; }
 }
+
+/* Picking an icon for one of your own categories */
+.icon-pick { border: 0; padding: 0; margin: 0; }
+.icon-pick legend { font-weight: 500; font-size: 13px; margin-bottom: 6px; }
+.icon-grid { display: flex; flex-wrap: wrap; gap: 8px; }
+.icon-grid label { position: relative; cursor: pointer; }
+.icon-grid input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+.icon-grid .icon-tile { width: 44px; height: 44px; border: 2px solid transparent; }
+.icon-grid input:checked + .icon-tile { border-color: var(--brand-primary); }
+.icon-grid input:focus-visible + .icon-tile { outline: 2px solid var(--brand-primary); outline-offset: 2px; }
 </style>
 </head>
 <body>
@@ -711,6 +721,32 @@ code.secret { word-break: break-all; font-size: 12px; background: var(--bg-faint
   ];
   var CAT = {}; CATS.forEach(function (c) { CAT[c[0]] = { key: c[0], label: c[1], icon: c[2] }; });
   var SPEND_CATS = CATS.filter(function (c) { return c[0] !== "income" && c[0] !== "transfers"; }).map(function (c) { return c[0]; });
+  // The household's own categories (meta/cats) sit with the built-in ones, just before General.
+  // They count as spending, like the rest. The lists above are rebuilt in place, so everything
+  // that reads them picks the new ones up.
+  var BASE_CATS = CATS.slice();
+  var CAT_ICONS = [["box", "Box"], ["cart", "Trolley"], ["cup", "Cup"], ["car", "Car"], ["home", "House"], ["receipt", "Receipt"], ["bag", "Bag"], ["smile", "Smile"], ["heart", "Heart"], ["ticket", "Ticket"],
+    ["plane", "Plane"], ["gift", "Gift"], ["paw", "Paw"], ["sparkle", "Sparkle"], ["wallet", "Wallet"], ["card", "Card"], ["shield", "Shield"], ["target", "Target"], ["users", "People"], ["landmark", "Building"], ["pound", "Pound"]];
+  function cleanCats(list) {
+    var out = [], seen = {}, icons = CAT_ICONS.map(function (x) { return x[0]; });
+    (Array.isArray(list) ? list : []).forEach(function (c) {
+      if (!c || typeof c.id !== "string" || !/^u[0-9a-z]{4,24}$/.test(c.id) || seen[c.id]) return;
+      var label = String(c.label || "").replace(/\s+/g, " ").trim().slice(0, 30); if (!label) return;
+      seen[c.id] = 1; out.push({ id: c.id, label: label, icon: icons.indexOf(c.icon) >= 0 ? c.icon : "box" });
+    });
+    return out.slice(0, 30);
+  }
+  function applyCats() {
+    var own = (S.cats || []).map(function (c) { return [c.id, c.label, c.icon]; });
+    var spend = BASE_CATS.filter(function (c) { return c[0] !== "income" && c[0] !== "transfers" && c[0] !== "general"; });
+    var next = spend.concat(own, BASE_CATS.filter(function (c) { return c[0] === "general" || c[0] === "income" || c[0] === "transfers"; }));
+    CATS.length = 0; next.forEach(function (c) { CATS.push(c); });
+    Object.keys(CAT).forEach(function (k) { delete CAT[k]; });
+    CATS.forEach(function (c) { CAT[c[0]] = { key: c[0], label: c[1], icon: c[2] }; });
+    SPEND_CATS.length = 0; CATS.forEach(function (c) { if (c[0] !== "income" && c[0] !== "transfers") SPEND_CATS.push(c[0]); });
+    dirtyTx();
+  }
+  function saveCats(list) { S.cats = cleanCats(list); saveMeta("cats", { list: S.cats }); applyCats(); }
   var POT_ICONS = ["cart", "cup", "car", "home", "receipt", "bag", "smile", "heart", "ticket", "plane", "gift", "paw", "shield", "sparkle", "wallet"];
   // To-do tags. These are the starting set; the household can add, rename-by-recreating and remove tags.
   var DEFAULT_TAGS = [{ id: "school", label: "School", c: 0 }, { id: "home", label: "Home", c: 1 }, { id: "nursery", label: "Nursery", c: 2 }, { id: "family", label: "Family", c: 3 }, { id: "personal", label: "Personal", c: 4 }];
@@ -871,7 +907,7 @@ code.secret { word-break: break-all; font-size: 12px; background: var(--bg-faint
     if (amount > 0) return "income";
     return "general";
   }
-  function effCat(t) { var c = t.o || S.rules[t.k] || t.c; return CAT[c] ? c : "general"; }
+  function effCat(t) { var r = S.rules[t.k], c = (CAT[t.o] && t.o) || (CAT[r] && r) || t.c; return CAT[c] ? c : "general"; }
   function allTx() {
     if (txCache) return txCache;
     var out = [];
@@ -1490,6 +1526,55 @@ code.secret { word-break: break-all; font-size: 12px; background: var(--bg-faint
         if (S.todoTag && !tagById(S.todoTag)) S.todoTag = "";
         if (S.todoAddTag && !tagById(S.todoAddTag)) S.todoAddTag = "";
       }
+    });
+  }
+  // ── Your own categories ──────────────────────────────────────────────
+  function catCount(id) { return allTx().filter(function (t) { return t.cat === id; }).length; }
+  function openCats() {
+    var own = S.cats || [];
+    openForm({
+      title: "Categories", saveLabel: "Done",
+      fields: [{ type: "html", html: '<p class="sm muted">Add your own, like Rosie, Wedding or Side hustle. They work like the built-in ones: pick one for a payment, and choose whether to use it for everything from the same place. They count as spending.</p>' +
+        (own.length ? '<div class="rows">' + own.map(function (c) {
+          var n = catCount(c.id);
+          return '<button type="button" class="tx-row" data-cat-edit="' + esc(c.id) + '"' + (S.canWrite ? "" : " disabled") + '><div class="icon-tile sm">' + icon(c.icon) + '</div><div class="main"><p>' + esc(c.label) + '</p><p class="sm muted">' + n + " payment" + (n === 1 ? "" : "s") + "</p></div>" + icon("pencil") + "</button>";
+        }).join("") + "</div>" : '<p class="muted">You haven\'t added any yet.</p>') +
+        (S.canWrite && own.length < 30 ? '<div><button type="button" class="btn btn-neutral" data-cat-new>' + icon("plus") + "Add a category</button></div>" : "") +
+        '<p class="sm faint">Built in: ' + esc(BASE_CATS.map(function (c) { return c[1]; }).join(", ")) + ".</p>" }],
+      onSave: function () {}
+    });
+  }
+  // Add or change one of your own categories. after(id) runs once it's saved (or after(null) once deleted).
+  function openCat(id, after) {
+    var c = id ? (S.cats || []).filter(function (x) { return x.id === id; })[0] : null; if (id && !c) return;
+    var sel = c ? c.icon : "box", n = c ? catCount(c.id) : 0;
+    var grid = '<fieldset class="field icon-pick"><legend>Icon</legend><div class="icon-grid">' + CAT_ICONS.map(function (ic) {
+      return '<label title="' + ic[1] + '"><input type="radio" name="caticon" value="' + ic[0] + '"' + (ic[0] === sel ? " checked" : "") + ' aria-label="' + ic[1] + '"><span class="icon-tile">' + icon(ic[0]) + "</span></label>";
+    }).join("") + "</div></fieldset>";
+    openForm({
+      title: c ? "Edit category" : "New category", saveLabel: c ? "Save" : "Add category",
+      fields: [{ name: "label", label: "Name", value: c ? c.label : "", placeholder: "e.g. Rosie, Wedding, Side hustle" }, { type: "html", html: grid +
+        (n ? '<p class="sm muted">' + n + " payment" + (n === 1 ? " uses" : "s use") + " it. If you delete it, they go back to the category the app picked for them.</p>" : "") }],
+      onSave: function () {
+        if (!S.canWrite) return;
+        var label = String(gv("label") || "").replace(/\s+/g, " ").trim().slice(0, 30), ic = (gBody.querySelector('input[name="caticon"]:checked') || {}).value || "box";
+        if (!label) { gErr("label", "Give the category a name."); return false; }
+        var low = label.toLowerCase(), list = (S.cats || []).slice();
+        if (BASE_CATS.some(function (b) { return b[1].toLowerCase() === low; }) || list.some(function (x) { return x.id !== id && x.label.toLowerCase() === low; })) { gErr("label", "There's already a category called that."); return false; }
+        var nid = id || newId("u");
+        if (c) list = list.map(function (x) { return x.id === id ? { id: id, label: label, icon: ic } : x; });
+        else { if (list.length >= 30) { gErr("label", "That's a lot of categories. Remove one first."); return false; } list.push({ id: nid, label: label, icon: ic }); }
+        saveCats(list);
+        if (after) setTimeout(function () { after(nid); }, 0);
+      },
+      // Payments in it aren't changed, so Undo puts everything back as it was
+      onDelete: c && S.canWrite ? function () {
+        var before = (S.cats || []).slice();
+        saveCats(before.filter(function (x) { return x.id !== id; }));
+        toast("Deleted “" + c.label + "”", function () { saveCats(before); render(); });
+        if (after) setTimeout(function () { after(null); }, 0);
+      } : null,
+      deleteLabel: "Delete this category", confirmLabel: "Delete it for both of you"
     });
   }
   function todosCard() {
@@ -2208,7 +2293,7 @@ code.secret { word-break: break-all; font-size: 12px; background: var(--bg-faint
       deleteLabel: "Delete account", confirmLabel: "Delete it and its " + n + " transactions"
     });
   }
-  function openTx(ref) {
+  function openTx(ref, preset) {
     var p = ref.split("|"), doc = S.txdocs[p[0]]; if (!doc) return;
     var t = doc.list[+p[1]]; if (!t) return;
     var acc = S.accounts[doc.acc] || {}, cur = effCat(t), mine = !!t.u;
@@ -2226,16 +2311,18 @@ code.secret { word-break: break-all; font-size: 12px; background: var(--bg-faint
       { name: "amount", label: "Amount", type: "money", value: Math.abs(t.a) },
       { name: "dir", label: "Type", type: "select", value: t.a < 0 ? "out" : "in", options: [["out", "Money out"], ["in", "Money in"]] },
       { name: "date", label: "Date", type: "date", value: t.d },
-      { name: "cat", label: "Category", type: "select", value: cur, options: CATS.map(function (c) { return [c[0], c[1]]; }) }
+      { name: "cat", label: "Category", type: "select", value: cur, options: catOptions() }
     ] : [
       { type: "html", html: head + '<p class="sm muted">A duplicate or a mistake? Remove it at the bottom. It stays out even if you import the same statement again.</p>' },
-      { name: "cat", label: "Category", type: "select", value: cur, options: CATS.map(function (c) { return [c[0], c[1]]; }) },
+      { name: "cat", label: "Category", type: "select", value: cur, options: catOptions() },
       { name: "always", label: "Use this for everything from “" + (t.m || "").slice(0, 30) + "”", type: "checkbox", value: true }
     ];
     openForm({
       title: t.m || "Transaction",
       fields: fields,
+      onNewCat: function (vals) { openCat(null, function (nid) { vals.cat = nid || cur; openTx(ref, vals); }); },
       onSave: function () {
+        if (!CAT[gv("cat")]) { gErr("cat", "Pick a category."); return false; }
         if (mine) {
           var desc = gv("desc").trim(), amt = parseMoney(gv("amount")), d = gv("date");
           if (!desc) { gErr("desc", "Add a short description."); return false; }
@@ -2271,7 +2358,15 @@ code.secret { word-break: break-all; font-size: 12px; background: var(--bg-faint
       },
       deleteLabel: "Remove this payment", confirmLabel: "Remove it for both of you"
     });
+    if (preset) Object.keys(preset).forEach(function (k) { var x = el("g-" + k); if (!x) return; if (x.type === "checkbox") x.checked = !!preset[k]; else x.value = preset[k]; });
   }
+  function catOptions() { return CATS.map(function (c) { return [c[0], c[1]]; }).concat(S.canWrite ? [["__new", "New category…"]] : []); }
+  // Choosing "New category…" in a window asks for it, then comes back with everything as it was
+  gBody.addEventListener("change", function (e) {
+    if (e.target.id !== "g-cat" || e.target.value !== "__new" || !gCur || !gCur.onNewCat) return;
+    var vals = {}; Array.prototype.forEach.call(gBody.querySelectorAll("input[id^='g-'], select[id^='g-'], textarea[id^='g-']"), function (x) { vals[x.id.slice(2)] = x.type === "checkbox" ? x.checked : x.value; });
+    gCur.onNewCat(vals);
+  });
   function openSettings() {
     var nTx = allTx().length;
     openForm({
@@ -2282,6 +2377,7 @@ code.secret { word-break: break-all; font-size: 12px; background: var(--bg-faint
         { name: "p2", label: "Second person", value: S.household.p2 },
         { name: "monthStart", label: "Your money month starts on", type: "select", value: monthStart(), options: [[1, "The 1st (calendar months)"]].concat(Array.apply(null, Array(30)).map(function (x, i) { return [i + 2, "The " + ordinal(i + 2) + (i + 2 > 28 ? " (or the month's last day)" : "")]; })),
           hint: "Pick your payday to see Spending, budgets and the health score from one payday to the next. If it falls on a weekend or bank holiday, the month starts on the working day before, as pay usually does. Wealth stays on calendar months." },
+        { type: "html", html: '<div class="tile row-between" style="gap:12px"><div><h3 class="mb-xs">Categories</h3><p class="sm muted">' + ((S.cats || []).length ? (S.cats.length === 1 ? "1 of your own" : S.cats.length + " of your own") + ", plus the built-in ones." : "Add your own, like Rosie or Wedding.") + '</p></div><button type="button" class="btn btn-neutral" data-cat-list>Categories</button></div>' },
         { type: "html", html: '<div class="tile"><h3 class="mb-xs">What gets saved</h3><p class="sm muted">' + PRIVACY_NOTE + '</p></div>' +
           (S.billsIgnore.length ? '<div class="tile"><h3 class="mb-xs">Hidden bills</h3><p class="sm muted mb-md">Payments you marked as not a bill. Show one again to put it back in Upcoming bills.</p><div class="stack" style="gap:8px">' +
             S.billsIgnore.map(function (k) { return '<div class="row-between" style="gap:12px"><span>' + esc(billName(k)) + '</span>' + (S.canWrite ? '<button type="button" class="btn btn-subtle" data-bill-unhide="' + esc(k) + '">Show again</button>' : "") + "</div>"; }).join("") + "</div></div>" : "") +
@@ -2323,8 +2419,8 @@ code.secret { word-break: break-all; font-size: 12px; background: var(--bg-faint
   }
   function wipeAll() {
     ["items", "accounts", "tx", "goals", "todos", "costs"].forEach(function (coll) { Object.keys(S[STORE[coll]]).forEach(function (id) { delDoc(coll, id); }); });
-    ["household", "history", "rules", "bills", "budgets", "tags", "health"].forEach(function (m) { if (db) write(function () { return db.doc("meta/" + m).delete(); }); });
-    S.history = { points: {} }; S.rules = {}; S.budgets = {}; S.billsIgnore = []; S.tags = null; S.todoTag = ""; S.household = { household: "Our household", p1: "Person 1", p2: "Person 2" }; S.chat.turns = [];
+    ["household", "history", "rules", "bills", "budgets", "tags", "cats", "health"].forEach(function (m) { if (db) write(function () { return db.doc("meta/" + m).delete(); }); });
+    S.history = { points: {} }; S.rules = {}; S.budgets = {}; S.billsIgnore = []; S.tags = null; S.cats = []; applyCats(); S.todoTag = ""; S.household = { household: "Our household", p1: "Person 1", p2: "Person 2" }; S.chat.turns = [];
   }
 
   // ══ Backup ═════════════════════════════════════════════════════════════
@@ -2336,6 +2432,7 @@ code.secret { word-break: break-all; font-size: 12px; background: var(--bg-faint
     put("items", S.items); put("accounts", S.accounts); put("tx", S.txdocs); put("goals", S.goals); put("todos", S.todos); put("costs", S.costs);
     docs.meta = { household: S.household, history: S.history, rules: { map: S.rules }, bills: { ignore: S.billsIgnore }, budgets: { map: S.budgets } };
     if (S.tags) docs.meta.tags = { list: S.tags };
+    if (S.cats && S.cats.length) docs.meta.cats = { list: S.cats };
     return JSON.stringify({ app: "our-money", version: 1, exportedAt: new Date().toISOString(), docs: docs });
   }
   function downloadBackup() {
@@ -2348,6 +2445,10 @@ code.secret { word-break: break-all; font-size: 12px; background: var(--bg-faint
     });
   }
   el("genBody").addEventListener("click", function (e) {
+    var ce = e.target.closest("[data-cat-edit]");
+    if (ce && S.canWrite) { openCat(ce.getAttribute("data-cat-edit"), function () { openCats(); }); return; }
+    if (e.target.closest("[data-cat-new]") && S.canWrite) { openCat(null, function () { openCats(); }); return; }
+    if (e.target.closest("[data-cat-list]")) { openCats(); return; }
     var pb = e.target.closest("[data-push]");
     if (pb && pushClick) { pushClick(pb.getAttribute("data-push")); return; }
     var u = e.target.closest("[data-bill-unhide]");
