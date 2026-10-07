@@ -151,6 +151,8 @@ p { margin: 0; }
 .cat-row { display: flex; align-items: center; gap: 12px; width: 100%; border: 0; background: transparent; padding: 8px; margin: 0 -8px; border-radius: var(--corner-md); text-align: left; color: inherit; font: inherit; cursor: pointer; box-sizing: content-box; }
 .cat-row:hover { background: var(--surface-hover); }
 @media (max-width: 640px) { .sum-row { gap: 8px; } .sum-row .tile { padding: 10px 12px; } .sum-row .tile p.num { font-size: 16px; } }
+/* The shares what-if can show ranges, which are too wide for three tiles on a phone: one row each instead */
+@media (max-width: 640px) { .sum-row.eq-sum { grid-template-columns: 1fr; gap: 6px; } .sum-row.eq-sum .tile { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; } .sum-row.eq-sum .tile p.num { margin-top: 0; white-space: nowrap; } }
 
 /* Sections & rows */
 .sec-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; gap: 12px; }
@@ -516,6 +518,15 @@ code.secret { word-break: break-all; font-size: 12px; background: var(--bg-faint
 .icon-grid .icon-tile { width: 44px; height: 44px; border: 2px solid transparent; }
 .icon-grid input:checked + .icon-tile { border-color: var(--brand-primary); }
 .icon-grid input:focus-visible + .icon-tile { outline: 2px solid var(--brand-primary); outline-offset: 2px; }
+
+/* Plan → Tax */
+.kv { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; font-size: 13px; padding: 6px 0; }
+.cat-row.static, .tx-row.static { cursor: default; }
+.cat-row.static:hover, .tx-row.static:hover { background: transparent; }
+.tx-row.static .main p:first-child { white-space: normal; }
+.tax-hero .bar.tax-year { background: rgba(255, 255, 255, 0.3); }
+.tax-hero .bar.tax-year > span { background: #fff; }
+.tax-hero .tax-dates { opacity: 0.9; }
 </style>
 </head>
 <body>
@@ -1026,7 +1037,7 @@ code.secret { word-break: break-all; font-size: 12px; background: var(--bg-faint
     }, 4000);
   }
   // Where a tapped notification opens (sw.js sends one of these names, picked from its own fixed list)
-  var OPEN_TO = { plan: ["plan", "todos"], "plan-health": ["plan", "health"], wealth: ["wealth", null] };
+  var OPEN_TO = { plan: ["plan", "todos"], "plan-health": ["plan", "health"], "plan-tax": ["plan", "tax"], wealth: ["wealth", null] };
   function openFrom(where) { var o = Object.prototype.hasOwnProperty.call(OPEN_TO, where) ? OPEN_TO[where] : null; if (!o) return false; S.page = o[0]; if (o[1]) S.planTab = o[1]; return true; }
   function go(page) { S.page = page; render(); window.scrollTo(0, 0); var h = root.querySelector("h1"); if (h) { h.setAttribute("tabindex", "-1"); h.focus({ preventScroll: true }); } }
 
@@ -1096,6 +1107,10 @@ code.secret { word-break: break-all; font-size: 12px; background: var(--bg-faint
     // This month's Wealth update
     var items = vals(S.items), left = items.filter(function (i) { return !doneThisMonth(i); }).length;
     if (items.length && left) rows.push(needRow("chart", esc(monthName(monthKey())) + " Wealth update", (items.length - left) + " of " + items.length + " done", 'data-open="wealth"'));
+    // Tax reminders (Plan → Tax)
+    taxNudges(taxPlan()).slice(0, 3).forEach(function (n) {
+      rows.push(needRow(n.icon, esc(n.title), esc(n.sub), n.id === "details" && S.canWrite ? 'data-action="tax-details"' : 'data-open="plan-tax"', n.warn));
+    });
     return '<div class="card"><div class="sec-head"><h2>Needs attention</h2>' + (rows.length ? '<span class="badge warning">' + rows.length + "</span>" : "") + "</div>" +
       (rows.length ? '<div class="rows">' + rows.join("") + "</div>" : '<div class="all-clear">' + icon("checkcircle") + "<p>Nothing needs you right now.</p></div>") + "</div>";
   }
@@ -1427,13 +1442,470 @@ code.secret { word-break: break-all; font-size: 12px; background: var(--bg-faint
   // ══ Page: Plan ═════════════════════════════════════════════════════════
   // What you're working towards: to-dos, goals and upcoming costs; the health score with what's going
   // well, what to improve and Ask Claude; and modelling. It was "Strategy", plus the planning cards from Home.
+  // ══ Tax (Plan → Tax) ════════════════════════════════════════════════════
+  // Rough estimates of each person's income tax and National Insurance, this tax year's allowances
+  // and ways to save, for England, Wales and Northern Ireland. Every figure lives in TAX_YEARS: check
+  // them each April (GOV.UK, or the House of Commons Library's "Direct taxes: rates and allowances")
+  // and add the new year. Salaries are typed in under "Your details" (meta/tax). Ask Claude only
+  // ever sees household totals, never salaries.
+  var TAX_YEARS = {
+    "2026/27": { checked: "October 2026", pa: 12570, taper: 100000, basic: 37700, addl: 125140, rates: [0.2, 0.4, 0.45],
+      niPT: 12570, niUEL: 50270, ni: [0.08, 0.02], psa: [1000, 500, 0], divAllow: 500, divRates: [0.1075, 0.3575, 0.3935],
+      pensionAA: 60000, aaTaper: [200000, 260000, 10000], cbWeek: [27.05, 17.9], hicbc: [60000, 80000], tfc: 2000, childcare: 100000, marriage: 1260,
+      cgt: [0.18, 0.24], cgtAllow: 3000, badr: 0.18, badrLimit: 1000000 }
+  };
+  function taxRules() {
+    var ty = taxYear().label, have = TAX_YEARS[ty];
+    return { year: ty, R: have || TAX_YEARS[Object.keys(TAX_YEARS).sort().pop()], current: !!have };
+  }
+  var PEN_METHODS = [["sacrifice", "Salary sacrifice"], ["netpay", "Before tax only"], ["ras", "After tax"]];
+  function num(v, max) { v = Number(v); return isFinite(v) && v > 0 ? Math.min(v, max) : 0; }
+  function cleanTax(d) {
+    d = d && typeof d === "object" ? d : {};
+    function person(p) {
+      p = p && typeof p === "object" ? p : {};
+      return { salary: num(p.salary, 1e7), bonus: num(p.bonus, 1e7), pension: num(p.pension, 100), employer: num(p.employer, 100),
+        method: PEN_METHODS.some(function (m) { return m[0] === p.method; }) ? p.method : "sacrifice",
+        interest: p.interest === "" || p.interest == null ? null : num(p.interest, 1e7), dividends: num(p.dividends, 1e7) };
+    }
+    return { p1: person(d.p1), p2: person(d.p2), childBenefit: !!d.childBenefit,
+      kids: String(d.kids || "").replace(/\s+/g, " ").trim().slice(0, 80),
+      hidden: (Array.isArray(d.hidden) ? d.hidden : []).filter(function (x) { return typeof x === "string" && x.length <= 40; }).slice(0, 40),
+      done: (Array.isArray(d.done) ? d.done : []).filter(function (x) { return typeof x === "string" && x.length <= 40; }).slice(-40),
+      at: typeof d.at === "string" && /^\d{4}-\d{2}-\d{2}/.test(d.at) ? d.at.slice(0, 24) : "",
+      equity: cleanEquity(d.equity) };
+  }
+  // Shares or options at work (the Tax tab's shares card). { who, company, price, rsu: { units, link }, opt: { units, strike, scheme, link }, soldYear }.
+  // "link" is the Wealth item they're logged as; soldYear is the tax year some were sold or exercised (for Self Assessment).
+  var EQ_SCHEMES = [["unsure", "Not sure yet"], ["emi", "EMI options"], ["unapproved", "Unapproved options"]];
+  function cleanEquity(e) {
+    if (!e || typeof e !== "object") return null;
+    var r = e.rsu && typeof e.rsu === "object" ? e.rsu : {}, o = e.opt && typeof e.opt === "object" ? e.opt : {};
+    function link(v) { return typeof v === "string" && /^[\w-]{1,60}$/.test(v) ? v : ""; }
+    var out = { who: e.who === "p2" ? "p2" : "p1", company: String(e.company || "").replace(/\s+/g, " ").trim().slice(0, 40), price: num(e.price, 1e7),
+      rsu: { units: Math.round(num(r.units, 1e9)), link: link(r.link) },
+      opt: { units: Math.round(num(o.units, 1e9)), strike: num(o.strike, 1e7), scheme: EQ_SCHEMES.some(function (s) { return s[0] === o.scheme; }) ? o.scheme : "unsure", link: link(o.link) },
+      soldYear: /^\d{4}\/\d{2}$/.test(e.soldYear || "") ? e.soldYear : "" };
+    return out.rsu.units || out.opt.units ? out : null;
+  }
+  // Tax on `amount` of income sitting on top of `base` (both after the tax-free allowance), band by band
+  function stackTax(amount, base, edges, rates) {
+    var tax = 0, lo = base, hi = base + amount, e = [0].concat(edges, [Infinity]);
+    for (var i = 0; i < rates.length; i++) { var a = Math.max(lo, e[i]), b = Math.min(hi, e[i + 1]); if (b > a) tax += (b - a) * rates[i]; }
+    return tax;
+  }
+  // One person's year. o.interest and o.dividends are the year's figures outside ISAs. o.penAmt fixes the
+  // pension in pounds (for "what if you earned £100 more"). o.extraRas is a one-off pension payment from
+  // take-home pay, with the tax added back (gross).
+  function taxCalc(o, R) {
+    var gross = (o.salary || 0) + (o.bonus || 0), pen = o.penAmt != null ? o.penAmt : gross * (o.pension || 0) / 100, m = o.method || "sacrifice";
+    var emp = m === "ras" ? gross : gross - pen, ras = (m === "ras" ? pen * 1.25 : 0) + (o.extraRas || 0); // relief at source: the pension adds basic-rate tax back
+    var niPay = m === "sacrifice" ? gross - pen : gross, sav = o.interest || 0, div = o.dividends || 0;
+    var ani = emp + sav + div - ras, pa = Math.max(0, R.pa - Math.max(0, ani - R.taper) / 2);
+    var left = pa, nsi = Math.max(0, emp - left); left = Math.max(0, left - emp);
+    var savT = Math.max(0, sav - left); left = Math.max(0, left - sav);
+    var divT = Math.max(0, div - left), edges = [R.basic + ras, R.addl + ras], all = nsi + savT + divT;
+    var band = all > edges[1] ? 2 : all > edges[0] ? 1 : 0, psa = R.psa[band];
+    var taxPay = stackTax(nsi, 0, edges, R.rates), savFree = Math.min(savT, psa), divFree = Math.min(divT, R.divAllow);
+    var taxSav = stackTax(savT - savFree, nsi + savFree, edges, R.rates), taxDiv = stackTax(divT - divFree, nsi + savT + divFree, edges, R.divRates);
+    var ni = Math.max(0, Math.min(niPay, R.niUEL) - R.niPT) * R.ni[0] + Math.max(0, niPay - R.niUEL) * R.ni[1];
+    return { gross: gross, pen: pen, emp: emp, ani: ani, pa: pa, band: all <= 0 ? -1 : band, psa: psa, nsi: nsi, sav: sav, div: div,
+      taxPay: taxPay, taxSav: taxSav, taxDiv: taxDiv, tax: taxPay + taxSav + taxDiv, ni: ni, home: gross - pen - taxPay - ni,
+      overBasic: Math.max(0, nsi - edges[0]), savOver: Math.max(0, savT - psa) };
+  }
+  function bandName(c, R) { return c.band < 0 ? "No income tax" : c.pa < R.pa && c.band >= 1 ? "Higher rate, losing allowance" : ["Basic rate", "Higher rate", "Additional rate"][c.band]; }
+  // Interest paid into each person's accounts this tax year, from the statements (joint accounts split in half)
+  function interestSeen() {
+    var from = dayKey(taxYear().start), out = { p1: 0, p2: 0 };
+    allTx().forEach(function (t) {
+      if (t.d < from || t.a <= 0 || t.cat === "transfers" || !/\binterest\b/i.test(t.m || "") || /charged|overdraft/i.test(t.m || "")) return;
+      if (t.owner === "p1" || t.owner === "p2") out[t.owner] += t.a; else { out.p1 += t.a / 2; out.p2 += t.a / 2; }
+    });
+    return out;
+  }
+  // Everything the Tax tab shows, worked out once
+  function taxPlan() {
+    var tr = taxRules(), R = tr.R, d = cleanTax(S.tax), seen = interestSeen(), start = taxYear().start;
+    var end = new Date(start.getFullYear() + 1, 3, 5), today = new Date(dayKey(new Date()) + "T00:00:00");
+    var daysLeft = Math.round((new Date(dayKey(end) + "T00:00:00") - today) / 864e5) + 1, daysIn = Math.round((today - new Date(dayKey(start) + "T00:00:00")) / 864e5) + 1;
+    var people = {};
+    ["p1", "p2"].forEach(function (p) {
+      var x = d[p], est = x.interest != null ? x.interest : daysIn >= 60 ? seen[p] * 365 / daysIn : seen[p];
+      var o = Object.assign({}, x, { interest: est }), c = taxCalc(o, R);
+      var more = taxCalc(Object.assign({}, o, { salary: (o.salary || 0) + 100, penAmt: c.pen }), R);
+      var monthly = taxCalc({ salary: x.salary, pension: x.pension, method: x.method }, R).home / 12;
+      people[p] = { p: p, name: ownerName(p), d: x, c: c, keep: (more.home - c.home) / 100, monthly: monthly, has: x.salary > 0,
+        interest: est, interestTyped: x.interest != null, interestSeen: seen[p], employerAmt: c.gross * x.employer / 100 };
+    });
+    var kids = d.kids ? d.kids.split(/\s*(?:,|&|\band\b)\s*/i).filter(Boolean) : [];
+    var cbYear = kids.length ? (R.cbWeek[0] + (kids.length - 1) * R.cbWeek[1]) * 52 : 0;
+    var top = people.p1.c.ani >= people.p2.c.ani ? people.p1 : people.p2;
+    var cbPct = Math.min(100, Math.max(0, Math.floor((top.c.ani - R.hicbc[0]) / 200)));
+    return { tr: tr, R: R, d: d, people: people, kids: kids, cbYear: cbYear, cbPct: cbPct, top: top, daysLeft: daysLeft, daysIn: daysIn, end: end,
+      total: people.p1.c.tax + people.p1.c.ni + people.p2.c.tax + people.p2.c.ni, gross: people.p1.c.gross + people.p2.c.gross };
+  }
+  // ── Tax tab screens ──────────────────────────────────────────────────
+  function andList(a) { return a.length < 2 ? a.join("") : a.slice(0, -1).join(", ") + " and " + a[a.length - 1]; }
+  function isaUsedBy(p) { return vals(S.items).filter(function (i) { return i.group === "isa" && i.owner === p && i.isaType !== "jisa"; }).reduce(function (s, i) { return s + contribThisYear(i); }, 0); }
+  function payLastSeen(p) {
+    var since = addDays(dayKey(new Date()), -45), best = null;
+    allTx().forEach(function (t) { if (t.owner === p && t.cat === "income" && t.a > 0 && t.d >= since && (!best || t.a > best.a)) best = t; });
+    return best;
+  }
+  // Ideas worked out from your own figures, biggest first. Each has an id so it can be hidden ("Not for us").
+  function taxTips(tp) {
+    var R = tp.R, P = tp.people, tips = [], kidsTxt = andList(tp.kids), hasKids = tp.kids.length > 0;
+    function add(id, icon, title, detail, worth, worthText) { if (tp.d.hidden.indexOf(id) < 0) tips.push({ id: id, icon: icon, title: title, detail: detail, worth: worth, worthText: worthText }); }
+    ["p1", "p2"].forEach(function (p) {
+      var o = P[p], c = o.c, sac = o.d.method === "sacrifice"; if (!o.has) return;
+      if (c.ani > R.taper) {
+        var over = Math.round(Math.min(c.ani, R.addl) - R.taper), less = over * (0.6 + (sac ? R.ni[1] : 0)), save = less + (hasKids ? R.tfc * tp.kids.length : 0);
+        add("cliff-" + p, "landmark", "Get " + o.name + " back under £100,000", o.name + "'s income is " + gbp(over) + " over £100,000, so part of the tax-free allowance is lost" + (hasKids ? ", and you can't use Tax-Free Childcare or the free childcare hours for " + kidsTxt : "") + ". " +
+          (o.d.method === "ras" ? "Paying about " + gbp(over * 0.8) + " more into the pension (it adds the rest) would fix that. You claim the extra tax back on a tax return." : "Paying " + gbp(over) + " more into the pension, before tax, would fix that. It would cost about " + gbp(over - less) + " in take-home pay."),
+          save, "About " + gbp(less) + " less tax a year" + (hasKids ? ", plus childcare help" : ""));
+      } else if (c.ani > R.taper - 10000) {
+        add("near-" + p, "alert", "Watch the £100,000 line", o.name + " is " + gbp(R.taper - c.ani) + " under £100,000. Above it you'd start losing tax-free allowance" + (hasKids ? ", and childcare support for " + kidsTxt : "") + ". If a pay rise or bonus takes " + o.name + " over, paying the extra into the pension keeps you under.", null, "Good to know");
+      }
+      if (c.overBasic > 0 && c.ani <= R.taper && o.d.method !== "ras") {
+        // Aim for a line that matters: keeping all the Child Benefit, or leaving the 40% band if it's close. Otherwise say what £100 a month does.
+        var rate = R.rates[1] + (sac ? R.ni[1] : 0), cbLine = tp.top === o && hasKids && c.ani > R.hicbc[0] && c.ani < R.hicbc[1], amt, why = "";
+        if (cbLine) { amt = Math.round(c.ani - R.hicbc[0]); why = " That brings " + o.name + "'s income down to " + gbp(R.hicbc[0]) + ", so you'd keep all the Child Benefit" + (tp.d.childBenefit ? "" : " if you claim it") + "."; }
+        else if (c.overBasic <= c.gross * 0.15) { amt = Math.round(c.overBasic); why = " That's the part taxed at 40%."; }
+        if (amt) add("pension-" + p, "landmark", "Pay " + gbp(amt) + " more a year into " + o.name + "'s pension", "About " + gbp(amt / 12) + " a month, before tax. It means about " + gbp(amt * rate) + " less tax and National Insurance, and costs " + gbp(amt * (1 - rate)) + " in take-home pay." + why,
+          amt * rate, "About " + gbp(amt * rate) + " less tax a year");
+        else add("pension-" + p, "landmark", "Pay more into " + o.name + "'s pension", o.name + " pays 40% tax on " + gbp(c.overBasic) + " of pay. Paying into the pension before tax gets that back: each extra £100 a month costs only about " + gbp(100 * o.keep) + " in take-home pay.", 1200 * rate, "£100 a month saves about " + gbp(1200 * rate) + " a year");
+      }
+    });
+    if (hasKids && !tp.d.childBenefit && tp.cbPct < 100) {
+      var keep = tp.cbYear * (1 - tp.cbPct / 100);
+      add("cb-claim", "smile", "Claim Child Benefit for " + kidsTxt, "It's " + gbp(tp.cbYear) + " a year. " + (tp.cbPct > 0 ? "You'd pay " + tp.cbPct + "% back through tax, as " + tp.top.name + "'s income is over " + gbp(R.hicbc[0]) + ", but you'd keep about " + gbp(keep) + "." : "You both earn under " + gbp(R.hicbc[0]) + ", so you'd keep all of it."), keep, "Worth about " + gbp(keep) + " a year");
+    }
+    if (hasKids && tp.d.childBenefit && tp.cbPct > 0 && tp.cbPct < 100) {
+      var charge = tp.cbYear * tp.cbPct / 100;
+      add("cb-charge", "smile", "Lower the Child Benefit charge", tp.top.name + " pays back about " + gbp(charge) + " of your Child Benefit. Paying " + gbp(tp.top.c.ani - R.hicbc[0]) + " more into a pension would stop that.", charge, "Worth up to about " + gbp(charge) + " a year");
+    }
+    if (hasKids && tp.d.childBenefit && tp.cbPct >= 100) {
+      add("cb-full", "smile", "Your Child Benefit is all paid back", "With " + tp.top.name + "'s income over " + gbp(R.hicbc[1]) + ", the charge takes back all of it. You can ask HMRC to stop the payments, which saves paying it back, and still keep the claim open.", null, "Good to know");
+    }
+    if (hasKids && P.p1.has && P.p2.has && P.p1.c.ani <= R.childcare && P.p2.c.ani <= R.childcare) {
+      add("tfc", "heart", "Use Tax-Free Childcare for " + kidsTxt, "You're both under £100,000, so for every £8 you pay your nursery or childminder, the government adds £2. Skip this if you already use it.", R.tfc * tp.kids.length, "Worth up to " + gbp(R.tfc * tp.kids.length) + " a year");
+    }
+    ["p1", "p2"].forEach(function (p) {
+      var o = P[p], q = P[p === "p1" ? "p2" : "p1"], c = o.c;
+      if (c.taxDiv > 0) add("dividends-" + p, "chart", "Move " + o.name + "'s investments into an ISA", "Dividends over " + gbp(R.divAllow) + " a year are taxed. Moving shares into an ISA (often called Bed and ISA) shelters them from now on.", c.taxDiv, "Worth about " + gbp(c.taxDiv) + " a year");
+      if (c.savOver <= 0) return;
+      var rate = R.rates[Math.max(0, c.band)], room = q.has && q.c.band >= 0 ? Math.max(0, q.c.psa - q.interest) : 0;
+      if (room > 0) {
+        var amt = Math.min(c.savOver, room);
+        add("savings-" + p, "wallet", "Move some of " + o.name + "'s savings into " + q.name + "'s name", o.name + "'s interest (about " + gbp(o.interest) + " a year) is over the " + gbp(c.psa) + " tax-free limit. In " + q.name + "'s name, up to " + gbp(amt) + " of it would fit within " + q.name + "'s " + gbp(q.c.psa) + ".", amt * rate, "Worth about " + gbp(amt * rate) + " a year");
+      } else add("savings-" + p, "wallet", "Put " + o.name + "'s savings in an ISA", o.name + "'s interest (about " + gbp(o.interest) + " a year) is over the " + gbp(c.psa) + " tax-free limit. Interest inside an ISA isn't taxed.", c.savOver * rate, "Worth about " + gbp(c.savOver * rate) + " a year");
+    });
+    ["p1", "p2"].forEach(function (p) {
+      var o = P[p], q = P[p === "p1" ? "p2" : "p1"];
+      if (o.has && o.c.emp + o.c.sav + o.c.div <= R.pa && q.has && q.c.band === 0) add("marriage", "users", "Claim the Marriage Allowance", o.name + " can pass " + gbp(R.marriage) + " of unused tax-free allowance to " + q.name + ". It's a quick form on GOV.UK.", R.marriage * R.rates[0], "Worth about " + gbp(R.marriage * R.rates[0]) + " a year");
+    });
+    var eq = tp.d.equity;
+    if (eq && eq.opt.units && eq.opt.scheme === "unsure") add("eq-scheme", "target", "Find out what type " + ownerName(eq.who) + "'s options are", "EMI options are taxed much more gently at a sale than unapproved ones. The grant letter will say, or HR can tell you. Until then, the shares card shows both.", null, "Good to know");
+    var isaLeft = ["p1", "p2"].reduce(function (s, p) { return s + Math.max(0, ADULT_ISA_ALLOWANCE - isaUsedBy(p)); }, 0);
+    if (isaLeft > 0) add("isa", "shield", "Use your ISA allowances", "You've " + gbp(isaLeft) + " of ISA allowance left between you before 5 April. Nothing inside an ISA is taxed, and unused allowance doesn't carry over.", null, gbp(isaLeft) + " left");
+    return tips.sort(function (a, b) { return (b.worth || 0) - (a.worth || 0); });
+  }
+  function taxGood(tp) {
+    var R = tp.R, P = tp.people, out = [], kidsTxt = andList(tp.kids), both = P.p1.has && P.p2.has;
+    if (both && P.p1.c.ani <= R.taper && P.p2.c.ani <= R.taper) out.push(["Both under £100,000", "You keep your full tax-free allowance" + (tp.kids.length ? ", and childcare support for " + kidsTxt : "") + "."]);
+    var sac = ["p1", "p2"].filter(function (p) { return P[p].has && P[p].d.method === "sacrifice" && P[p].d.pension > 0; });
+    if (sac.length) out.push(["Pensions before tax", (sac.length === 2 ? "You both pay" : P[sac[0]].name + " pays") + " into a pension by salary sacrifice, which saves income tax and National Insurance."]);
+    ["p1", "p2"].forEach(function (p) { var o = P[p]; if (o.has && o.interest > 0 && o.c.savOver <= 0) out.push([o.name + "'s savings", o.name + "'s interest is within the " + gbp(o.c.psa) + " tax-free limit."]); });
+    ["p1", "p2"].forEach(function (p) { if (isaUsedBy(p) >= ADULT_ISA_ALLOWANCE) out.push([P[p].name + "'s ISA", P[p].name + " has used all of this year's ISA allowance."]); });
+    if (tp.d.childBenefit && tp.kids.length && tp.cbPct === 0) out.push(["Child Benefit", "You keep all of it, as you both earn under " + gbp(R.hicbc[0]) + "."]);
+    return out;
+  }
+  // Self Assessment: a tax year's return is due on 31 January after it ends
+  function saDue(label) { return new Date(parseInt(label, 10) + 2, 0, 31); }
+  function saYearFor(due) { var y = due.getFullYear() - 2; return y + "/" + String((y + 1) % 100).padStart(2, "0"); }
+  function saReasons(tp, label) {
+    var P = tp.people, out = [], e = tp.d.equity;
+    if (tp.d.childBenefit && tp.cbPct > 0) out.push("to pay back some Child Benefit");
+    ["p1", "p2"].forEach(function (p) { if (P[p].interest > 10000 || P[p].d.dividends > 10000) out.push("for " + P[p].name + "'s savings or dividends"); });
+    if (e && e.soldYear === label) out.push("for " + ownerName(e.who) + "'s share sale");
+    return out;
+  }
+  // Tax reminders for Home's Needs attention, most pressing first. Ones tied to an idea in Ways to save go
+  // when it's hidden ("Not for us") or added to the to-dos. The dated ones have "Done" in Coming up (kept
+  // per year in meta/tax done), and saving Your details clears the new tax year one.
+  function taxNudges(tp) {
+    var R = tp.R, P = tp.people, d = tp.d, out = [], now = new Date(), year = tp.tr.year, tips = taxTips(tp);
+    function tip(id) { var t = tips.filter(function (x) { return x.id === id; })[0]; return t && !stepAdded(t.title) ? t : null; }
+    function add(id, ic, title, sub, warn, done) { out.push({ id: id, icon: ic, title: title, sub: sub, warn: !!warn, done: done || "" }); }
+    // April and May: pay rises and pension changes usually start with the tax year
+    if ((P.p1.has || P.p2.has) && tp.daysIn <= 56 && (!d.at || d.at < dayKey(taxYear().start))) add("details", "pencil", "New tax year: check your tax details", "If your pay or pensions changed in April, the Tax tab needs the new figures.");
+    // The last 60 days before 5 April, if you keep ISAs in Wealth
+    var hasIsa = vals(S.items).some(function (i) { return i.group === "isa" && i.isaType !== "jisa"; });
+    var isaLeft = ["p1", "p2"].reduce(function (s, p) { return s + Math.max(0, ADULT_ISA_ALLOWANCE - isaUsedBy(p)); }, 0);
+    if (hasIsa && isaLeft > 0 && tp.daysLeft <= 60 && d.hidden.indexOf("isa") < 0 && d.done.indexOf("isa-" + year) < 0)
+      add("isa", "shield", gbp(isaLeft) + " of ISA allowance left", (tp.daysLeft <= 1 ? "Today is the last day" : tp.daysLeft + " days until 5 April") + ". Unused allowance doesn't carry over.", tp.daysLeft <= 14, "isa-" + year);
+    // December and January, when it looks like you need to file
+    var mo = now.getMonth();
+    if (mo === 11 || mo === 0) {
+      var due = new Date(now.getFullYear() + (mo === 11 ? 1 : 0), 0, 31), why = saReasons(tp, saYearFor(due));
+      var days = Math.round((new Date(dayKey(due) + "T00:00:00") - new Date(dayKey(now) + "T00:00:00")) / 864e5);
+      if (why.length && d.done.indexOf("sa-" + due.getFullYear()) < 0) add("sa", "receipt", "Self Assessment due 31 January", "You may need to file one, " + andList(why) + ". " + (days === 0 ? "It's due today." : days + (days === 1 ? " day" : " days") + " to go."), days <= 14, "sa-" + due.getFullYear());
+    }
+    // Tied to ideas in Ways to save
+    ["p1", "p2"].forEach(function (p) {
+      var o = P[p], t;
+      if ((t = tip("cliff-" + p))) add("cliff-" + p, "landmark", o.name + " is over £100,000", "Paying more into the pension before 5 April could bring it back under. " + t.worthText + ".", true);
+      else if (tp.daysLeft <= 90 && tip("near-" + p)) add("near-" + p, "alert", o.name + " is " + gbp(R.taper - o.c.ani) + " under £100,000", "Worth knowing before a bonus or pay rise, with " + tp.daysLeft + " days of the tax year left.");
+      if (tip("savings-" + p) && (o.interestTyped || tp.daysIn >= 60)) add("savings-" + p, "wallet", o.name + "'s interest is over the tax-free limit", "About " + gbp(o.c.taxSav) + " in tax this year. Ways to save has an idea.");
+    });
+    return out.sort(function (a, b) { return b.warn - a.warn; });
+  }
+  function planTax() {
+    var tp = taxPlan(), R = tp.R, P = tp.people, any = P.p1.has || P.p2.has;
+    function bar2(pct, cls) { return bar(Math.min(100, pct), cls); }
+    function allow(ic, label, used, of, note, over) {
+      return '<div class="cat-row static"><div class="icon-tile sm' + (over ? " danger" : "") + '">' + icon(ic) + '</div><div style="flex:1;min-width:0"><div class="row-between mb-xs" style="gap:8px"><span>' + esc(label) + '</span><span class="row-between" style="gap:8px"><span class="sm muted num">' + gbp(used) + " of " + gbp(of) + "</span>" + (over ? '<span class="badge danger">Over</span>' : "") + "</span></div>" +
+        bar2(of > 0 ? used / of * 100 : used > 0 ? 100 : 0, over ? "over" : "") + (note ? '<p class="sm faint mt-xs">' + esc(note) + "</p>" : "") + "</div></div>";
+    }
+    var progress = Math.round((tp.daysIn - 1) / (tp.daysIn + tp.daysLeft - 1) * 100);
+    var hero = '<div class="hero solo tax-hero" style="margin-bottom:24px"><div class="row-between mb-md" style="flex-wrap:wrap;gap:8px"><p class="sm">' + icon("pound") + " Tax year " + esc(tp.tr.year) + '</p><span class="badge">' + tp.daysLeft + " day" + (tp.daysLeft === 1 ? "" : "s") + " to go</span></div>" +
+      (any ? '<p class="big num">' + gbp(tp.total) + '</p><p class="sm mt-xs">Estimated income tax and National Insurance for ' + (P.p1.has && P.p2.has ? "you both" : esc(P[P.p1.has ? "p1" : "p2"].name)) + " this tax year" + (tp.gross > 0 ? ". That's " + Math.round(tp.total / tp.gross * 100) + "% of your pay." : ".") + "</p>"
+        : '<p style="font-weight:600;font-size:17px">See what tax you\'ll pay, and ways to pay less</p><p class="sm mt-xs">Add your salaries and pensions to get started. Only the two of you can see them.</p>' + (S.canWrite ? '<button type="button" class="btn btn-neutral mt-md" data-action="tax-details" style="margin-top:12px">' + icon("pencil") + "Add your details</button>" : "")) +
+      '<div style="margin-top:14px"><div class="bar tax-year"><span style="width:' + progress + '%"></span></div><p class="sm mt-xs tax-dates">6 Apr ' + taxYear().start.getFullYear() + " · " + progress + "% through · 5 Apr " + tp.end.getFullYear() + "</p></div></div>";
+    // Ways to save comes first: it's where the money is
+    var tips = taxTips(tp);
+    var tipsCard = '<div class="card"><div class="sec-head"><h2>Ways to save</h2>' + (tips.length ? '<span class="badge warning">' + tips.length + (tips.length === 1 ? " idea" : " ideas") + "</span>" : "") + '</div><div class="stack" style="gap:12px">' +
+      (tips.length ? tips.map(function (t) {
+        var added = stepAdded(t.title);
+        return '<div class="insight"><div class="icon-tile" style="color:var(--warning-text)">' + icon(t.icon) + '</div><div style="flex:1;min-width:0"><p style="font-weight:600">' + esc(t.title) + '</p><p class="mt-xs"><span class="badge success">' + esc(t.worthText) + '</span></p><p class="sm muted mt-xs">' + esc(t.detail) + "</p>" +
+          (S.canWrite ? '<button type="button" class="link sm mt-xs" data-tax-hide="' + esc(t.id) + '">Not for us</button>' : "") + "</div>" +
+          (S.canWrite ? '<button class="icon-btn" data-tax-todo="' + esc(t.id) + '" aria-label="' + (added ? "Added to to-do" : "Add to to-do") + '"' + (added ? " disabled" : "") + ">" + icon(added ? "check" : "listplus") + "</button>" : "") + "</div>";
+      }).join("") : '<p class="muted">' + (any ? "Nothing to suggest right now." : "Add your details and ideas appear here.") + "</p>") +
+      (tp.d.hidden.length && S.canWrite ? '<button type="button" class="link sm" data-tax-unhide>Show ' + tp.d.hidden.length + " hidden " + (tp.d.hidden.length === 1 ? "idea" : "ideas") + "</button>" : "") + "</div></div>";
+    // A card each
+    function person(p) {
+      var o = P[p], c = o.c, seen = o.has ? payLastSeen(p) : null;
+      if (!o.has) return '<div class="card"><div class="row-between" style="gap:12px;justify-content:flex-start"><div class="avatar">' + esc(o.name.slice(0, 1).toUpperCase()) + '</div><div><p style="font-weight:600">' + esc(o.name) + '</p><p class="sm muted">Add ' + esc(o.name) + "'s salary in Your details to see this.</p></div></div></div>";
+      var close = seen && Math.abs(seen.a - o.monthly) <= Math.max(25, o.monthly * 0.04);
+      return '<div class="card"><div class="row-between mb-lg" style="gap:12px;align-items:flex-start"><div class="row-between" style="gap:12px;justify-content:flex-start;min-width:0"><div class="avatar">' + esc(o.name.slice(0, 1).toUpperCase()) + '</div><div style="min-width:0"><p style="font-weight:600">' + esc(o.name) + '</p><p class="sm muted">' + gbp(o.d.salary) + " salary" + (o.d.bonus ? " + " + gbp(o.d.bonus) + " bonus" : "") + (o.d.pension ? " · " + o.d.pension + "% pension" + (o.d.method === "ras" ? " after tax" : " before tax") : "") + "</p></div></div>" +
+        '<span class="badge ' + (c.band >= 1 ? "warning" : "default") + '" style="white-space:nowrap">' + esc(bandName(c, R)) + "</span></div>" +
+        '<div class="sum-row two-up" style="margin-bottom:12px"><div class="tile"><p class="sm muted">Income tax</p><p class="num" style="font-weight:600">' + gbp(c.tax) + '</p></div><div class="tile"><p class="sm muted">National Insurance</p><p class="num" style="font-weight:600">' + gbp(c.ni) + "</p></div></div>" +
+        '<div class="kv"><span class="muted">Take-home, estimated</span><span class="num" style="font-weight:600">' + gbp(o.monthly) + " a month</span></div>" +
+        (seen ? '<div class="kv"><span class="muted">Last pay seen (' + esc(shortDay(seen.d)) + ')</span><span class="num">' + gbp(seen.a) + (close ? ' <span class="pos">✓ matches</span>' : "") + "</span></div>" + (close ? "" : '<p class="sm faint">Not quite the estimate. A bonus, your tax code or other deductions on your payslip can explain it.</p>') : "") +
+        '<div class="kv"><span class="muted">From your next £1 earned</span><span class="num" style="font-weight:600">you keep ' + Math.round(o.keep * 100) + "p</span></div></div>";
+    }
+    // Allowances this tax year
+    var rows = [];
+    ["p1", "p2"].forEach(function (p) { rows.push(allow("shield", P[p].name + "'s ISA", isaUsedBy(p), ADULT_ISA_ALLOWANCE)); });
+    var kids = {}; vals(S.items).filter(function (i) { return i.group === "isa" && i.isaType === "jisa"; }).forEach(function (i) { var k = (i.child || "Child").trim(); kids[k] = (kids[k] || 0) + contribThisYear(i); });
+    Object.keys(kids).forEach(function (k) { rows.push(allow("smile", k + "'s Junior ISA", kids[k], JUNIOR_ISA_ALLOWANCE)); });
+    ["p1", "p2"].forEach(function (p) {
+      var o = P[p]; if (!o.has && !o.interestSeen) return;
+      var note = o.interestTyped ? "" : o.interestSeen > 0 ? (tp.daysIn >= 60 ? "About " + gbp(o.interest) + " for the year, from " + gbp(o.interestSeen) + " seen in your statements so far" : gbp(o.interestSeen) + " seen in your statements so far") : "No interest seen in your statements yet. You can add it in Your details.";
+      rows.push(allow("wallet", o.name + "'s tax-free interest", o.interest, o.c.psa, (o.c.savOver > 0 ? "Over by " + gbp(o.c.savOver) + ", about " + gbp(o.c.taxSav) + " in tax. " : "") + note, o.c.savOver > 0));
+      if (o.d.dividends) rows.push(allow("chart", o.name + "'s tax-free dividends", o.d.dividends, R.divAllow, "", o.d.dividends > R.divAllow));
+    });
+    ["p1", "p2"].forEach(function (p) { var o = P[p]; if (o.has && (o.c.pen || o.employerAmt)) rows.push(allow("landmark", o.name + "'s pension", o.c.pen * (o.d.method === "ras" ? 1.25 : 1) + o.employerAmt, R.pensionAA, "You and your employer, across the year")); });
+    var allowCard = '<div class="card"><div class="sec-head"><h2>Allowances this tax year</h2></div><div class="stack" style="gap:6px">' + rows.join("") + "</div></div>";
+    // Coming up
+    var now = new Date(), sa = new Date(now.getFullYear() + (now > new Date(now.getFullYear(), 0, 31, 23, 59) ? 1 : 0), 0, 31), whySa = saReasons(tp, saYearFor(sa));
+    var nudges = taxNudges(tp), eq = tp.d.equity, saleDue = eq && eq.soldYear ? saDue(eq.soldYear) : null;
+    function doneFor(id) { var n = nudges.filter(function (x) { return x.id === id; })[0]; return n && S.canWrite ? '<button type="button" class="link sm mt-xs" data-tax-done="' + esc(n.done) + '">Done, stop the reminder</button>' : ""; }
+    function date(when, what, sub, extra) { return '<div class="tx-row static"><div class="icon-tile sm">' + icon("target") + '</div><div class="main"><p>' + esc(what) + '</p><p class="sm muted">' + esc(sub) + "</p>" + (extra || "") + '</div><span class="sm num" style="white-space:nowrap;font-weight:600">' + esc(when) + "</span></div>"; }
+    var dates = '<div class="card"><div class="sec-head"><h2>Coming up</h2></div><div class="rows">' +
+      date("5 Apr " + tp.end.getFullYear(), "Last day for this year's ISAs and pensions", tp.daysLeft + " days to go. Unused allowance doesn't carry over.", doneFor("isa")) +
+      date("31 Jan " + sa.getFullYear(), "Self Assessment deadline", whySa.length ? "You may need to file one, " + andList(whySa) + "." : "You probably don't need one. The app will say if that changes.", doneFor("sa")) +
+      date("31 May " + tp.end.getFullYear(), "Check your P60s and tax codes", "Your employers send P60s after the tax year ends.") +
+      (saleDue && saleDue > sa ? date("31 Jan " + saleDue.getFullYear(), "Self Assessment for the share sale", "For " + ownerName(eq.who) + "'s shares sold in " + eq.soldYear + ". Capital Gains Tax, and any tax payroll missed, goes on it.") : "") + "</div></div>";
+    var good = taxGood(tp);
+    var goodCard = '<div class="card"><div class="sec-head"><h2>What\'s going well</h2>' + (good.length ? '<span class="badge success">' + good.length + "</span>" : "") + '</div><div class="stack" style="gap:12px">' +
+      (good.length ? good.map(function (g) { return insightTile(g[0], g[1], true); }).join("") : '<p class="muted">' + (any ? "Nothing to celebrate yet. The ideas above are a good place to start." : "Add your details to see this.") + "</p>") + "</div></div>";
+    var details = '<div class="card" style="margin-bottom:12px"><div class="row-between" style="gap:12px;flex-wrap:wrap"><div><h2 class="mb-xs">Your details</h2><p class="sm muted">' +
+      (any ? "Salaries before tax, pensions, savings outside ISAs, and Child Benefit. Update them when your pay changes." : "Nothing added yet.") + "</p></div>" + (S.canWrite ? '<button type="button" class="btn btn-neutral" data-action="tax-details">' + icon("pencil") + (any ? "Edit details" : "Add details") + "</button>" : "") + "</div></div>";
+    return hero + '<div class="grid g2" style="margin-bottom:24px">' + tipsCard + allowCard + "</div>" + equityCard(tp) +
+      '<div class="grid g2" style="margin-bottom:24px">' + person("p1") + person("p2") + "</div>" +
+      '<div class="grid g2" style="margin-bottom:24px">' + dates + goodCard + "</div>" + details +
+      '<p class="sm faint" style="margin:0 0 24px">Rough estimates using ' + esc(tp.tr.year === taxYear().label ? tp.tr.year : Object.keys(TAX_YEARS).sort().pop()) + " rates for England, Wales and Northern Ireland, checked " + esc(tp.R.checked) + ". Not tax advice." +
+      (tp.tr.current ? "" : ' <span class="warn-text">This tax year\'s rates haven\'t been added yet, so these use last year\'s.</span>') + "</p>";
+  }
+  function openTaxDetails() {
+    var d = cleanTax(S.tax), seen = interestSeen(), jisa = vals(S.items).filter(function (i) { return i.group === "isa" && i.isaType === "jisa" && i.child; }).map(function (i) { return i.child.trim(); });
+    var kids = d.kids || jisa.filter(function (k, i) { return jisa.indexOf(k) === i; }).join(", ");
+    function person(p) {
+      var x = d[p], n = ownerName(p);
+      return [{ type: "html", html: '<h3 class="mt-md">' + esc(n) + "</h3>" },
+        { name: p + "_salary", label: "Salary before tax, per year", type: "money", value: x.salary || "" },
+        { name: p + "_bonus", label: "Bonus or other pay this tax year (optional)", type: "money", value: x.bonus || "" },
+        { name: p + "_pension", label: "Pension you pay in, % of pay", type: "number", value: x.pension || "", placeholder: "e.g. 5" },
+        { name: p + "_method", label: "How you pay into it", type: "select", value: x.method, options: PEN_METHODS, hint: "Check a payslip. Salary sacrifice comes off before tax and National Insurance. Before tax only comes off before tax but not National Insurance (common for NHS staff and teachers). After tax means the pension adds the tax back for you." },
+        { name: p + "_employer", label: "Your employer pays in, % of pay (optional)", type: "number", value: x.employer || "", placeholder: "e.g. 5" },
+        { name: p + "_interest", label: "Interest from savings outside ISAs, this tax year (optional)", type: "money", value: x.interest == null ? "" : x.interest, hint: seen[p] > 0 ? gbp(seen[p]) + " seen in your statements so far. Leave blank to use that." : "Leave blank to use the interest seen in your statements." },
+        { name: p + "_dividends", label: "Dividends outside ISAs, this tax year (optional)", type: "money", value: x.dividends || "" }];
+    }
+    openForm({
+      title: "Your details for tax", saveLabel: "Save",
+      fields: [{ type: "html", html: '<p class="sm muted">Used only to estimate your tax. It\'s saved like everything else, so only the two of you can see it.</p>' }]
+        .concat(person("p1"), person("p2"), [{ type: "html", html: '<h3 class="mt-md">Children</h3>' },
+          { name: "kids", label: "Children's first names (optional)", value: kids, placeholder: "e.g. Ruby, Max", hint: "For Child Benefit and childcare tips. Separate names with commas." },
+          { name: "cb", label: "We claim Child Benefit", type: "checkbox", value: d.childBenefit }]),
+      onSave: function () {
+        if (!S.canWrite) return;
+        function m(n) { var v = parseMoney(gv(n)); return v != null && !isNaN(v) && v > 0 ? v : 0; }
+        function pc(n) { var v = Number(String(gv(n) || "").replace(/[%\s]/g, "")); return isFinite(v) && v > 0 ? Math.min(v, 100) : 0; }
+        var next = { childBenefit: !!gv("cb"), kids: String(gv("kids") || ""), hidden: d.hidden, done: d.done, equity: d.equity, at: new Date().toISOString() };
+        ["p1", "p2"].forEach(function (p) {
+          var iv = String(gv(p + "_interest") || "").trim();
+          next[p] = { salary: m(p + "_salary"), bonus: m(p + "_bonus"), pension: pc(p + "_pension"), employer: pc(p + "_employer"), method: gv(p + "_method"), interest: iv === "" ? null : m(p + "_interest"), dividends: m(p + "_dividends") };
+        });
+        S.tax = cleanTax(next); saveMeta("tax", S.tax);
+      }
+    });
+  }
+  // ── Shares or options at work (Tax tab) ──────────────────────────────
+  // A what-if for a sale. RSUs and unapproved options are taxed like pay at a sale (income tax and
+  // National Insurance, usually through payroll). EMI options pay Capital Gains Tax on the gain instead:
+  // 18% with Business Asset Disposal Relief (up to £1m in a lifetime), or 18%/24% without it, after the
+  // £3,000 allowance. When the type isn't known yet, both are shown as a range.
+  var EQ_TP = null; // the tax plan the shares card was drawn with, so the slider doesn't redo it
+  function equityAt(tp, price, scheme) {
+    var e = tp.d.equity, R = tp.R, o = tp.people[e.who], q = tp.people[e.who === "p1" ? "p2" : "p1"], base = o.c;
+    var rsu = e.rsu.units * price, gain = e.opt.units * Math.max(0, price - e.opt.strike), asPay = rsu + (scheme === "unapproved" ? gain : 0);
+    var c = taxCalc(Object.assign({}, o.d, { interest: o.interest, bonus: (o.d.bonus || 0) + asPay, penAmt: base.pen }), R);
+    var payTax = c.tax - base.tax + c.ni - base.ni, cgt = 0, cgtMax = 0, cb = 0;
+    if (scheme === "emi" && gain > 0) {
+      var taxable = Math.max(0, gain - R.cgtAllow), room = Math.max(0, R.basic - c.nsi), relief = Math.min(taxable, R.badrLimit);
+      var cgtOn = function (amt, left) { return Math.min(amt, left) * R.cgt[0] + Math.max(0, amt - left) * R.cgt[1]; };
+      cgt = relief * R.badr + cgtOn(taxable - relief, Math.max(0, room - relief)); cgtMax = cgtOn(taxable, room);
+    }
+    if (tp.d.childBenefit && tp.cbYear) {
+      var pct = Math.min(100, Math.max(0, Math.floor((Math.max(c.ani, q.c.ani) - R.hicbc[0]) / 200)));
+      cb = tp.cbYear * Math.max(0, pct - tp.cbPct) / 100;
+    }
+    return { scheme: scheme, price: price, rsu: rsu, gain: gain, asPay: asPay, payTax: payTax, cgt: cgt, cgtMax: cgtMax, cb: cb, tax: payTax + cgt + cb,
+      keep: rsu + gain - payTax - cgt - cb, c: c, o: o, over100: c.ani > R.taper && base.ani <= R.taper };
+  }
+  // Each way the options might be taxed, plus the RSUs on their own
+  function equityRuns(tp, price) {
+    var e = tp.d.equity, schemes = !e.opt.units ? ["none"] : e.opt.scheme === "unsure" ? ["emi", "unapproved"] : [e.opt.scheme];
+    var runs = schemes.map(function (s) { return equityAt(tp, price, s); });
+    function range(f) { var a = runs.map(f), lo = Math.min.apply(null, a), hi = Math.max.apply(null, a); return Math.round(lo) === Math.round(hi) ? gbp(lo) : gbp(lo) + "–" + gbp(hi); }
+    return { runs: runs, none: e.opt.units ? equityAt(tp, price, "none") : runs[0], range: range };
+  }
+  // The pension payment that brings that year back to £100,000, within this year's pension allowance
+  // (which shrinks above £260,000 of income)
+  function equityPension(tp, x) {
+    var R = tp.R, o = x.o, need = x.c.ani - R.taper; if (need <= 0) return null;
+    var own = o.c.pen * (o.d.method === "ras" ? 1.25 : 1), thresh = x.c.ani + (o.d.method === "sacrifice" ? o.c.pen : 0), adj = x.c.ani + own + o.employerAmt;
+    var aa = thresh > R.aaTaper[0] && adj > R.aaTaper[1] ? Math.max(R.aaTaper[2], R.pensionAA - (adj - R.aaTaper[1]) / 2) : R.pensionAA;
+    var gross = Math.min(need, Math.max(0, aa - own - o.employerAmt)); if (gross <= 0) return null;
+    var after = taxCalc(Object.assign({}, o.d, { interest: o.interest, bonus: (o.d.bonus || 0) + x.asPay, penAmt: o.c.pen, extraRas: gross }), R);
+    return { gross: gross, net: gross * (1 - R.rates[0]), back: x.c.tax - after.tax, full: gross >= need, aa: aa };
+  }
+  function taxIdea(ic, title, detail) { return '<div class="insight" style="margin-top:12px"><div class="icon-tile" style="color:var(--warning-text)">' + icon(ic) + '</div><div style="flex:1;min-width:0"><p style="font-weight:600">' + esc(title) + '</p><p class="sm muted mt-xs">' + esc(detail) + "</p></div></div>"; }
+  function equityOut(tp, price) {
+    var e = tp.d.equity, R = tp.R, name = ownerName(e.who), other = ownerName(e.who === "p1" ? "p2" : "p1"), er = equityRuns(tp, price), runs = er.runs, two = runs.length > 1, a = runs[0];
+    function line(label, sub, value) { return '<div class="kv"><span><span>' + esc(label) + "</span>" + (sub ? '<br><span class="sm faint">' + esc(sub) + "</span>" : "") + '</span><span class="num" style="font-weight:600;white-space:nowrap">' + value + "</span></div>"; }
+    function n(x) { return x.toLocaleString("en-GB"); }
+    var html = '<div class="sum-row eq-sum" style="margin:12px 0">' +
+      '<div class="tile"><p class="sm muted">Worth before tax</p><p class="num">' + gbp(a.rsu + a.gain) + "</p></div>" +
+      '<div class="tile"><p class="sm muted">Tax, roughly</p><p class="num">' + er.range(function (x) { return x.tax; }) + "</p></div>" +
+      '<div class="tile"><p class="sm muted">You\'d keep</p><p class="num pos">' + er.range(function (x) { return x.keep; }) + "</p></div></div>";
+    if (two) html += '<p class="sm muted" style="margin-bottom:8px">A range, because the tax depends on what type the options are.</p>';
+    if (e.rsu.units) html += line(n(e.rsu.units) + " RSUs, worth " + gbp(a.rsu), "Taxed like pay: income tax and National Insurance", "about " + gbp(er.none.payTax));
+    runs.forEach(function (x) {
+      var label = n(e.opt.units) + " options, " + gbp(x.gain) + " gain";
+      if (x.scheme === "emi") html += line(label + (two ? ", if EMI" : ""), "Capital Gains Tax, 18% with Business Asset Disposal Relief after the " + gbp(R.cgtAllow) + " allowance. Up to " + gbp(x.cgtMax) + " without the relief.", "about " + gbp(x.cgt));
+      if (x.scheme === "unapproved") html += line(label + (two ? ", if unapproved" : ""), "Taxed like pay: income tax and National Insurance", "about " + gbp(x.payTax - er.none.payTax));
+    });
+    var cbMax = Math.max.apply(null, runs.map(function (x) { return x.cb; }));
+    if (cbMax > 0) html += line("Child Benefit paid back", "The charge rises with " + name + "'s income", (two ? "up to " : "about ") + gbp(cbMax));
+    // The £100k line, and ways to soften it
+    var hit = runs.filter(function (x) { return x.over100; }).pop(), notes = [];
+    if (hit) {
+      notes.push('<div class="insight" style="margin-top:12px"><div class="icon-tile danger">' + icon("alert") + '</div><div style="flex:1;min-width:0"><p style="font-weight:600">' + (two && !runs.every(function (x) { return x.over100; }) ? "If they're unapproved options, that" : "That") + " would take " + esc(name) + " over £100,000 this tax year</p>" +
+        '<p class="sm muted mt-xs">Income of about ' + gbp(hit.c.ani) + ". Part of the tax-free allowance goes (that's in the tax above)" + (tp.kids.length ? ", and you'd lose Tax-Free Childcare (up to " + gbp(R.tfc * tp.kids.length) + ") and the free childcare hours for " + esc(andList(tp.kids)) + " for the year" : "") + ".</p></div></div>");
+      var pen = equityPension(tp, hit);
+      if (pen) notes.push(taxIdea("landmark", "Pay into " + name + "'s pension in the same tax year", "Paying in about " + gbp(pen.net) + " (the pension adds " + gbp(pen.gross - pen.net) + ") " +
+        (pen.full ? "brings the income back to £100,000" : "uses the rest of this year's " + gbp(pen.aa) + " pension allowance" + (pen.aa < R.pensionAA ? " (it shrinks at this income)" : "")) +
+        ". You'd get about " + gbp(pen.back) + " back through a tax return, so " + gbp(pen.gross) + " in the pension costs about " + gbp(pen.net - pen.back) + (pen.full && tp.kids.length ? ", and you keep the childcare help" : "") + ". Unused allowance from the last 3 years can add more."));
+    }
+    var emi = runs.filter(function (x) { return x.scheme === "emi" && x.gain > R.cgtAllow; })[0], unap = runs.filter(function (x) { return x.scheme === "unapproved" && x.gain > 0; })[0];
+    if (emi) notes.push(taxIdea("users", "Give some shares to " + other + " before selling", "Couples can give each other shares without tax. If they're EMI shares, " + other + "'s own " + gbp(R.cgtAllow) + " allowance would save about " + gbp(R.cgtAllow * R.badr) + ". The relief rules are fiddly, so check with an adviser first."));
+    if (unap) notes.push(taxIdea("target", "With unapproved options, timing matters", "If " + name + " can choose when to exercise, splitting it across two tax years (either side of 5 April) keeps more of the gain out of the higher tax bands."));
+    if (!tp.people[e.who].has) notes.unshift('<p class="sm warn-text mt-md">Add ' + esc(name) + "'s salary in Your details below for a truer figure.</p>");
+    return html + notes.join("") + '<p class="sm faint mt-md">Tax on RSUs and unapproved options usually comes off through payroll. Capital Gains Tax, and anything payroll misses, goes on a Self Assessment return by 31 January after the tax year ends. With sums like these, an hour with a tax adviser is worth it.</p>';
+  }
+  function equityCard(tp) {
+    var e = tp.d.equity; EQ_TP = tp;
+    if (!e) return '<div class="card" style="margin-bottom:24px"><div class="row-between" style="gap:12px;flex-wrap:wrap"><div><h2 class="mb-xs">Shares or options at work?</h2><p class="sm muted">Add RSUs or share options to see what a sale would mean for your tax, and how to soften it.</p></div>' +
+      (S.canWrite ? '<button type="button" class="btn btn-neutral" data-action="tax-equity">' + icon("plus") + "Add shares</button>" : "") + "</div></div>";
+    var top = Math.max(e.price * 5, e.opt.strike * 3, 1), step = top <= 20 ? 0.01 : top <= 200 ? 0.1 : 1, price = Math.min(S.eqPrice != null ? S.eqPrice : e.price, top);
+    var kind = { unsure: "type not known yet", emi: "EMI", unapproved: "unapproved" }[e.opt.scheme];
+    return '<div class="card" style="margin-bottom:24px"><div class="sec-head"><h2>' + esc(ownerName(e.who)) + "'s shares" + (e.company ? " in " + esc(e.company) : "") + "</h2>" + (S.canWrite ? '<button type="button" class="btn btn-subtle" data-action="tax-equity">' + icon("pencil") + "Edit</button>" : "") + "</div>" +
+      '<p class="sm muted">' + [e.rsu.units ? e.rsu.units.toLocaleString("en-GB") + " RSUs" : "", e.opt.units ? e.opt.units.toLocaleString("en-GB") + " options at " + gbp2(e.opt.strike) + " each (" + kind + ")" : ""].filter(Boolean).join(" and ") +
+      ". A share is worth about " + gbp2(e.price) + " now.</p>" +
+      '<div class="slider mt-md"><div class="row-between mb-xs" style="gap:8px;flex-wrap:wrap"><label for="eqPrice">What if the company sold at</label><span class="sl-num"><span class="muted">£</span><input type="number" data-eq="price" min="0" max="' + top + '" step="' + step + '" value="' + price + '" aria-label="Sale price per share"><span class="muted">a share</span></span></div>' +
+      '<input type="range" id="eqPrice" data-eq="price" min="0" max="' + top + '" step="' + step + '" value="' + price + '"></div>' +
+      '<div id="eqOut">' + equityOut(tp, price) + "</div></div>";
+  }
+  function openEquity() {
+    var e = cleanEquity((S.tax || {}).equity) || { who: "p2", company: "", price: 0, rsu: { units: 0, link: "" }, opt: { units: 0, strike: 0, scheme: "unsure", link: "" }, soldYear: "" };
+    var ty = taxYear().label, prev = taxYear(new Date(taxYear().start.getTime() - 864e5)).label;
+    var sold = [["", "Not yet"], [ty, "Yes, this tax year (" + ty + ")"], [prev, "Yes, last tax year (" + prev + ")"]];
+    if (e.soldYear && e.soldYear !== ty && e.soldYear !== prev) sold.push([e.soldYear, "Yes, in " + e.soldYear]);
+    var items = [["", "Not in Wealth"]].concat(vals(S.items).filter(function (i) { return GROUPS[i.group] && GROUPS[i.group].side === "asset"; }).map(function (i) { return [i.id, i.name]; }));
+    openForm({
+      title: "Shares and options", saveLabel: "Save",
+      fields: [{ type: "html", html: '<p class="sm muted">Used only to estimate tax at a sale. It\'s saved like everything else, so only the two of you can see it.</p>' },
+        { name: "who", label: "Whose are they?", type: "select", value: e.who, options: [["p1", ownerName("p1")], ["p2", ownerName("p2")]] },
+        { name: "company", label: "Company (optional)", value: e.company },
+        { name: "price", label: "What one share is worth now (best guess)", type: "money", value: e.price || "", hint: "For a private company, use the latest valuation or the price from the last funding round." },
+        { type: "html", html: '<h3 class="mt-md">RSUs</h3>' },
+        { name: "rsu_units", label: "How many RSUs", type: "number", value: e.rsu.units || "", placeholder: "0", hint: "In a private company, RSUs are usually taxed when the company sells. If tax was already paid when they vested, leave them out: only the rise since then is taxed." },
+        { name: "rsu_link", label: "Logged in Wealth as", type: "select", value: e.rsu.link, options: items },
+        { type: "html", html: '<h3 class="mt-md">Options</h3>' },
+        { name: "opt_units", label: "How many options", type: "number", value: e.opt.units || "", placeholder: "0" },
+        { name: "opt_strike", label: "Price to buy each share (exercise price)", type: "money", value: e.opt.strike || "", hint: "If there are several grants at different prices, use the average." },
+        { name: "opt_scheme", label: "Type", type: "select", value: e.opt.scheme, options: EQ_SCHEMES, hint: "The grant letter says \"EMI\" or \"Enterprise Management Incentive\" if they're EMI." },
+        { name: "opt_link", label: "Logged in Wealth as", type: "select", value: e.opt.link, options: items },
+        { type: "html", html: '<h3 class="mt-md">Sold any?</h3>' },
+        { name: "sold", label: "Sold or exercised any yet?", type: "select", value: e.soldYear, options: sold, hint: "So the app can remind you about Self Assessment. Tax on a sale is due by 31 January after the tax year (6 April to 5 April) ends." }],
+      onSave: function () {
+        if (!S.canWrite) return;
+        function m(k) { var v = parseMoney(gv(k)); return v != null && !isNaN(v) && v > 0 ? v : 0; }
+        function n(k) { var v = Number(String(gv(k) || "").replace(/[,\s]/g, "")); return isFinite(v) && v > 0 ? v : 0; }
+        var next = cleanEquity({ who: gv("who"), company: gv("company"), price: m("price"), rsu: { units: n("rsu_units"), link: gv("rsu_link") }, opt: { units: n("opt_units"), strike: m("opt_strike"), scheme: gv("opt_scheme"), link: gv("opt_link") }, soldYear: gv("sold") });
+        if (!next) { gErr("rsu_units", "Add how many RSUs or options there are."); return false; }
+        if (!next.price) { gErr("price", "Add a rough value per share."); return false; }
+        S.eqPrice = null; S.tax = Object.assign(cleanTax(S.tax), { equity: next }); saveMeta("tax", S.tax);
+      },
+      onDelete: S.tax && S.tax.equity && S.canWrite ? function () {
+        var before = S.tax; S.eqPrice = null; S.tax = Object.assign(cleanTax(S.tax), { equity: null }); saveMeta("tax", S.tax);
+        toast("Shares removed", function () { S.tax = before; saveMeta("tax", S.tax); render(); });
+      } : null,
+      deleteLabel: "Remove these shares", confirmLabel: "Remove them for both of you"
+    });
+  }
+  // On Wealth, a line linked to shares says roughly what it's worth after tax, at today's value
+  function equityNote(item) {
+    var e = S.tax && cleanEquity(S.tax.equity); if (!e || (e.rsu.link !== item.id && e.opt.link !== item.id)) return "";
+    var tp = taxPlan(), er = equityRuns(tp, e.price), lo = 0, hi = 0;
+    if (e.rsu.link === item.id && e.rsu.units) { lo += er.none.rsu - er.none.payTax; hi += er.none.rsu - er.none.payTax; }
+    if (e.opt.link === item.id && e.opt.units) {
+      var ks = er.runs.map(function (x) { return x.gain - (x.scheme === "emi" ? x.cgt : x.payTax - er.none.payTax); });
+      lo += Math.min.apply(null, ks); hi += Math.max.apply(null, ks);
+    }
+    if (!lo && !hi) return "";
+    return '<p class="sm faint">About ' + (Math.round(lo) === Math.round(hi) ? gbp(lo) : gbp(lo) + "–" + gbp(hi)) + " after tax, at " + gbp2(e.price) + " a share</p>";
+  }
   function pagePlan() {
     var tab = S.planTab, html = pageHead("Plan", "What you're working towards") +
-      '<div class="tabs sp-tabs" role="tablist">' + [["todos", "To-dos &amp; goals"], ["health", "Health"], ["model", "Modelling"]].map(function (x) {
+      '<div class="tabs sp-tabs" role="tablist">' + [["todos", "To-dos &amp; goals"], ["health", "Health"], ["model", "Modelling"], ["tax", "Tax"]].map(function (x) {
         return '<button type="button" role="tab" data-ptab="' + x[0] + '" aria-selected="' + (tab === x[0]) + '">' + x[1] + "</button>";
       }).join("") + "</div>";
     if (tab === "health") return html + planHealth();
     if (tab === "model") return html + planModel();
+    if (tab === "tax") return html + planTax();
     return html + '<div class="stack">' + todosCard() + '<div class="grid g2">' + goalsCard() + costsCard() + "</div></div>";
   }
   function planHealth() {
@@ -2129,7 +2601,7 @@ code.secret { word-break: break-all; font-size: 12px; background: var(--bg-faint
     return '<p class="sm muted">' + esc(bits.join(", ")) + (S.who === "all" ? '<span class="owner-chip">' + esc(ownerShort(i)) + "</span>" : "") + "</p>";
   }
   function assetRow(i) {
-    return '<button type="button" class="item-row" data-witem="' + esc(i.id) + '"' + (S.canWrite ? ' aria-label="Edit ' + esc(i.name) + '"' : " disabled") + '><div style="min-width:0;flex:1"><p>' + esc(i.name) + "</p>" + subLine(i) + statusLine(i) + '</div><div class="r"><p class="num" style="font-weight:600">' + gbp(i.value) + "</p>" + changeLine(i) + "</div>" + rowChev() + "</button>";
+    return '<button type="button" class="item-row" data-witem="' + esc(i.id) + '"' + (S.canWrite ? ' aria-label="Edit ' + esc(i.name) + '"' : " disabled") + '><div style="min-width:0;flex:1"><p>' + esc(i.name) + "</p>" + subLine(i) + statusLine(i) + equityNote(i) + '</div><div class="r"><p class="num" style="font-weight:600">' + gbp(i.value) + "</p>" + changeLine(i) + "</div>" + rowChev() + "</button>";
   }
   function liabRow(i) {
     var facts = "";
@@ -2419,8 +2891,8 @@ code.secret { word-break: break-all; font-size: 12px; background: var(--bg-faint
   }
   function wipeAll() {
     ["items", "accounts", "tx", "goals", "todos", "costs"].forEach(function (coll) { Object.keys(S[STORE[coll]]).forEach(function (id) { delDoc(coll, id); }); });
-    ["household", "history", "rules", "bills", "budgets", "tags", "cats", "health"].forEach(function (m) { if (db) write(function () { return db.doc("meta/" + m).delete(); }); });
-    S.history = { points: {} }; S.rules = {}; S.budgets = {}; S.billsIgnore = []; S.tags = null; S.cats = []; applyCats(); S.todoTag = ""; S.household = { household: "Our household", p1: "Person 1", p2: "Person 2" }; S.chat.turns = [];
+    ["household", "history", "rules", "bills", "budgets", "tags", "cats", "tax", "health"].forEach(function (m) { if (db) write(function () { return db.doc("meta/" + m).delete(); }); });
+    S.history = { points: {} }; S.rules = {}; S.budgets = {}; S.billsIgnore = []; S.tags = null; S.cats = []; applyCats(); S.tax = null; S.eqPrice = null; S.todoTag = ""; S.household = { household: "Our household", p1: "Person 1", p2: "Person 2" }; S.chat.turns = [];
   }
 
   // ══ Backup ═════════════════════════════════════════════════════════════
@@ -2433,6 +2905,7 @@ code.secret { word-break: break-all; font-size: 12px; background: var(--bg-faint
     docs.meta = { household: S.household, history: S.history, rules: { map: S.rules }, bills: { ignore: S.billsIgnore }, budgets: { map: S.budgets } };
     if (S.tags) docs.meta.tags = { list: S.tags };
     if (S.cats && S.cats.length) docs.meta.cats = { list: S.cats };
+    if (S.tax) docs.meta.tax = S.tax;
     return JSON.stringify({ app: "our-money", version: 1, exportedAt: new Date().toISOString(), docs: docs });
   }
   function downloadBackup() {
@@ -3362,6 +3835,15 @@ code.secret { word-break: break-all; font-size: 12px; background: var(--bg-faint
     var accs = vals(S.accounts).filter(function (a) { return a.balance != null; });
     if (accs.length) { L.push("\nBANK ACCOUNT BALANCES:"); accs.forEach(function (a) { L.push("- " + a.name + " (" + ownerName(a.owner) + ", " + a.kind + "): " + (a.kind === "credit" ? gbp(Math.abs(a.balance)) + " owed" : gbp(a.balance))); }); }
     var goals = vals(S.goals);
+    var tpc = taxPlan();
+    if (tpc.people.p1.has || tpc.people.p2.has) {
+      L.push("\nTAX (rough estimates, " + tpc.tr.year + ", England rates): income tax and National Insurance for the household this tax year come to about " + gbp(tpc.total) + ".");
+      taxTips(tpc).forEach(function (t) { L.push("- Idea: " + t.title + " (" + t.worthText + ")"); });
+    }
+    if (tpc.d.equity) {
+      var eqc = equityRuns(tpc, tpc.d.equity.price), eq0 = eqc.runs[0];
+      L.push("\nSHARES AT WORK (rough what-if): " + ownerName(tpc.d.equity.who) + " has RSUs or share options worth about " + gbp(eq0.rsu + eq0.gain) + " before tax at today's estimated value. Tax at a sale would be roughly " + eqc.range(function (x) { return x.tax; }) + (eqc.runs.length > 1 ? " (depends on whether the options are EMI or unapproved)" : "") + ".");
+    }
     if (goals.length) { L.push("\nSAVINGS GOALS:"); goals.forEach(function (g) { L.push("- " + g.name + ": " + gbp(g.saved) + " of " + gbp(g.target) + (g.by ? " by " + monthLabel(g.by, "year") : "")); }); }
     var costs = vals(S.costs);
     if (costs.length) { L.push("\nPLANNED UPCOMING COSTS:"); costs.forEach(function (c) { L.push("- " + c.label + ": " + gbp(c.amount) + (c.when ? " in " + monthLabel(c.when, "year") : ", date to be confirmed")); }); }
@@ -3455,7 +3937,7 @@ code.secret { word-break: break-all; font-size: 12px; background: var(--bg-faint
     d.addEventListener("click", function (e) { if (e.target.closest("[data-close]") || e.target === d) d.close(); });
   });
   document.addEventListener("click", function (e) {
-    var t = e.target.closest("[data-page],[data-action],[data-tx],[data-acc],[data-goal],[data-stab],[data-wg],[data-cost-del],[data-cost-edit],[data-cost-todo],[data-witem],[data-wtab],[data-who],[data-wbx],[data-wbrange],[data-sptab],[data-ptab],[data-open],[data-sp-cat],[data-go-tx],[data-pick-month],[data-todo-del],[data-todo-filter],[data-bill-todo],[data-bill-ignore],[data-step-todo]");
+    var t = e.target.closest("[data-page],[data-action],[data-tx],[data-acc],[data-goal],[data-stab],[data-wg],[data-cost-del],[data-cost-edit],[data-cost-todo],[data-witem],[data-wtab],[data-who],[data-wbx],[data-wbrange],[data-sptab],[data-ptab],[data-open],[data-sp-cat],[data-go-tx],[data-pick-month],[data-todo-del],[data-todo-filter],[data-bill-todo],[data-bill-ignore],[data-step-todo],[data-tax-todo],[data-tax-hide],[data-tax-unhide],[data-tax-done]");
     if (!t || t.closest("dialog")) return;
     var a;
     if ((a = t.getAttribute("data-page")) !== null) return go(a);
@@ -3467,6 +3949,8 @@ code.secret { word-break: break-all; font-size: 12px; background: var(--bg-faint
       if (a === "model-reset") { var tb = S.model ? S.model.tab : "inv"; S.model = null; S.model0tab = tb; return render(); }
       if (!S.canWrite) return;
       if (a === "import") return openImport();
+      if (a === "tax-details") return S.canWrite && openTaxDetails();
+      if (a === "tax-equity") return S.canWrite && openEquity();
       if (a === "budgets") return openBudgets();
       if (a === "addtx") return openAddTx();
       if (a === "goal") return openGoal(null);
@@ -3521,6 +4005,24 @@ code.secret { word-break: break-all; font-size: 12px; background: var(--bg-faint
       if (!vals(S.todos).some(function (x) { return x.label === label; })) saveDoc("todos", newId("t"), { label: label, done: false, who: "", createdAt: new Date().toISOString() });
       return render();
     }
+    if ((a = t.getAttribute("data-tax-todo")) !== null) {
+      var tt = taxTips(taxPlan()).filter(function (x) { return x.id === a; })[0];
+      if (tt && S.canWrite && !stepAdded(tt.title)) saveDoc("todos", newId("t"), { label: tt.title, done: false, who: "", createdAt: new Date().toISOString() });
+      return render();
+    }
+    if ((a = t.getAttribute("data-tax-hide")) !== null) {
+      if (!S.canWrite) return;
+      var before = cleanTax(S.tax), next = cleanTax(S.tax); next.hidden = next.hidden.concat([a]);
+      S.tax = next; saveMeta("tax", S.tax); toast("Hidden. It won't show again.", function () { S.tax = before; saveMeta("tax", S.tax); render(); });
+      return render();
+    }
+    if ((a = t.getAttribute("data-tax-done")) !== null) {
+      if (!S.canWrite || !a || a.length > 40) return;
+      var doneBefore = cleanTax(S.tax), doneNext = cleanTax(S.tax); doneNext.done = doneNext.done.concat([a]);
+      S.tax = doneNext; saveMeta("tax", S.tax); toast("Reminder cleared.", function () { S.tax = doneBefore; saveMeta("tax", S.tax); render(); });
+      return render();
+    }
+    if (t.hasAttribute("data-tax-unhide")) { if (S.canWrite) { S.tax = Object.assign(cleanTax(S.tax), { hidden: [] }); saveMeta("tax", S.tax); } return render(); }
     if ((a = t.getAttribute("data-step-todo")) !== null) {
       var hc = health(currentMonth(), allTx()).checks.filter(function (c) { return c.key === a && c.step; })[0];
       if (hc && !stepAdded(hc.step.title)) saveDoc("todos", newId("t"), { label: hc.step.title, done: false, who: "", createdAt: new Date().toISOString() });
@@ -3560,6 +4062,12 @@ code.secret { word-break: break-all; font-size: 12px; background: var(--bg-faint
       v = Math.min(Math.max(v, +t.min), +t.max); S.model[parts[0]][parts[1]] = v; S.model.touched = true;
       root.querySelectorAll('[data-sl="' + t.getAttribute("data-sl") + '"]').forEach(function (o) { if (o !== t) o.value = v; });
       var mo = el("modelOut"); if (mo) mo.innerHTML = modelOut(); return;
+    }
+    if (t.getAttribute && t.getAttribute("data-eq") === "price" && EQ_TP && EQ_TP.d.equity) {
+      var ev = parseFloat(t.value); if (!isFinite(ev)) return;
+      ev = Math.min(Math.max(ev, 0), +t.max); S.eqPrice = ev;
+      root.querySelectorAll('[data-eq="price"]').forEach(function (o) { if (o !== t) o.value = ev; });
+      var eo = el("eqOut"); if (eo) eo.innerHTML = equityOut(EQ_TP, ev); return;
     }
     if (t.getAttribute && t.getAttribute("data-txq") === "q") {
       S.txq.q = t.value; clearTimeout(searchTimer);
@@ -3619,6 +4127,9 @@ code.secret { word-break: break-all; font-size: 12px; background: var(--bg-faint
     var now = new Date(), cur = monthKey(now), today = now.getDate();
     var months = []; for (var i = 5; i >= 0; i--) months.push(addMonths(cur, -i));
     S.household = { household: "The Parkers", p1: "Sam", p2: "Alex" };
+    // Made-up details for the Tax tab
+    S.tax = { p1: { salary: 44850, pension: 5, employer: 5, method: "sacrifice" }, p2: { salary: 39300, pension: 9.8, employer: 23.7, method: "netpay" }, childBenefit: false, kids: "Rosie", hidden: [],
+      equity: { who: "p2", company: "", price: 4, rsu: { units: 5000, link: "w11" }, opt: { units: 20000, strike: 0.5, scheme: "unsure", link: "" } } };
     var accs = {
       a1: { name: "Sam's current account", bank: "Monzo", owner: "p1", kind: "current", balance: 2140.55 },
       a2: { name: "Alex's current account", bank: "Starling", owner: "p2", kind: "current", balance: 1682.1 },
@@ -3677,7 +4188,8 @@ code.secret { word-break: break-all; font-size: 12px; background: var(--bg-faint
       w7: { group: "isa", name: "Rosie's Junior ISA", provider: "Fidelity", value: 1850, owner: "joint", isaType: "jisa", child: "Rosie", contrib: 600, contribYear: ty },
       w8: { group: "cash", name: "Easy access saver", provider: "Nationwide", value: 14200, owner: "joint" },
       w9: { group: "credit", name: "Amex", provider: "American Express", value: 2140, owner: "p2", limit: 5000, due: 22 },
-      w10: { group: "loan", name: "Car finance", provider: "Black Horse", value: 7800, owner: "joint", rate: 6.9, monthly: 289, end: "2028-06" }
+      w10: { group: "loan", name: "Car finance", provider: "Black Horse", value: 7800, owner: "joint", rate: 6.9, monthly: 289, end: "2028-06" },
+      w11: { group: "other", name: "Work shares (RSUs)", provider: "5,000 at £4", value: 20000, owner: "p2" }
     };
     // A few figures are already in for this month; the rest still need this month's update
     var fresh = { w2: 1, w3: 1, w8: 1, w9: 1 }, inThisMonth = new Date(now.getFullYear(), now.getMonth(), Math.max(1, today - 2), 9).toISOString(), endLastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 28, 9).toISOString();
@@ -3686,7 +4198,7 @@ code.secret { word-break: break-all; font-size: 12px; background: var(--bg-faint
     items.w2.prevValue = 312950; items.w2.prevAt = items.w3.prevAt;
     S.items = items;
     // Six months of balance-sheet history, line by line, so "Month by month" has something to show
-    var monthly = { w1: 1200, w2: -650, w3: 520, w4: 630, w5: 400, w6: 150, w7: 70, w8: 310, w9: -60, w10: -289 }, pts = {};
+    var monthly = { w1: 1200, w2: -650, w3: 520, w4: 630, w5: 400, w6: 150, w7: 70, w8: 310, w9: -60, w10: -289, w11: 0 }, pts = {};
     months.forEach(function (m, i) {
       var back = 5 - i, list = [], iv = {}, lg = {};
       Object.keys(items).forEach(function (k) {
