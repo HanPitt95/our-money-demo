@@ -780,6 +780,58 @@ code.secret { word-break: break-all; font-size: 12px; background: var(--bg-faint
   function monthLabel(key, fmt) { var p = key.split("-"); var d = new Date(+p[0], +p[1] - 1, 1); return d.toLocaleDateString("en-GB", fmt === "long" ? { month: "long", year: "numeric" } : fmt === "year" ? { month: "short", year: "numeric" } : { month: "short" }); }
   function addMonths(key, n) { var p = key.split("-"); var d = new Date(+p[0], +p[1] - 1 + n, 1); return monthKey(d); }
   function monthName(key) { var p = key.split("-"); return new Date(+p[0], +p[1] - 1, 1).toLocaleDateString("en-GB", { month: "long" }); }
+  // ── Pay months ─────────────────────────────────────────────────────────
+  // Spending can run from payday to payday instead of by calendar month. S.household.monthStart is
+  // the day the household's month starts (1, the default, means calendar months). A pay month is
+  // known by the month it starts in, so "2026-09" runs from 18 Sep to 17 Oct. If the start day is a
+  // weekend or bank holiday, the month starts on the working day before, because that's when pay
+  // usually arrives (otherwise one month would get two pay days and the next none). Only how
+  // payments are grouped changes: they're still stored by calendar month. Wealth keeps calendar months.
+  function monthStart() { var d = Math.round(Number(S.household && S.household.monthStart)); return d >= 2 && d <= 31 ? d : 1; }
+  var BANK_HOLS = {};
+  // England and Wales bank holidays for a year, with the usual Monday (or Tuesday) in lieu
+  function bankHolidays(y) {
+    if (BANK_HOLS[y]) return BANK_HOLS[y];
+    var out = {};
+    function add(d) { out[dayKey(d)] = 1; }
+    function inLieu(m, d) { var x = new Date(y, m, d); while (x.getDay() === 0 || x.getDay() === 6 || out[dayKey(x)]) x.setDate(x.getDate() + 1); return x; }
+    function monday(m, first) { var x = first ? new Date(y, m, 1) : new Date(y, m + 1, 0); while (x.getDay() !== 1) x.setDate(x.getDate() + (first ? 1 : -1)); return x; }
+    var a = y % 19, b = Math.floor(y / 100), c = y % 100, h = (19 * a + b - Math.floor(b / 4) - Math.floor((b - Math.floor((b + 8) / 25) + 1) / 3) + 15) % 30;
+    var l = (32 + 2 * (b % 4) + 2 * Math.floor(c / 4) - h - c % 4) % 7, k = Math.floor((a + 11 * h + 22 * l) / 451);
+    var em = Math.floor((h + l - 7 * k + 114) / 31) - 1, ed = (h + l - 7 * k + 114) % 31 + 1; // Easter Sunday
+    add(inLieu(0, 1)); add(new Date(y, em, ed - 2)); add(new Date(y, em, ed + 1));
+    add(monday(4, true)); add(monday(4, false)); add(monday(7, false));
+    add(inLieu(11, 25)); add(inLieu(11, 26));
+    return (BANK_HOLS[y] = out);
+  }
+  var PM_START = {};
+  function pmStart(key) {
+    var D = monthStart(); if (D === 1) return key + "-01";
+    var ck = key + "|" + D; if (PM_START[ck]) return PM_START[ck];
+    var p = key.split("-"), d = new Date(+p[0], +p[1] - 1, Math.min(D, new Date(+p[0], +p[1], 0).getDate()));
+    while (d.getDay() === 0 || d.getDay() === 6 || bankHolidays(d.getFullYear())[dayKey(d)]) d.setDate(d.getDate() - 1);
+    return (PM_START[ck] = dayKey(d));
+  }
+  function pmEnd(key) { return addDays(pmStart(addMonths(key, 1)), -1); }
+  // The (pay) month a day belongs to, and the one we're in now
+  function txMonth(day) {
+    var k = day.slice(0, 7); if (monthStart() === 1) return k;
+    var nx = addMonths(k, 1);
+    return day >= pmStart(nx) ? nx : day >= pmStart(k) ? k : addMonths(k, -1);
+  }
+  function thisMonth() { return txMonth(dayKey(new Date())); }
+  function shortDay(iso) { var p = iso.split("-"); return +p[2] + " " + new Date(+p[0], +p[1] - 1, 1).toLocaleDateString("en-GB", { month: "short" }); }
+  // "October 2026" for a calendar month; "18 Sep – 17 Oct" for a pay month (with years if it isn't all this year)
+  function pmLabel(key, fmt) {
+    if (monthStart() === 1) return monthLabel(key, fmt);
+    var s = pmStart(key), e = pmEnd(key);
+    if (!fmt) return shortDay(s);
+    var ys = s.slice(0, 4), ye = e.slice(0, 4), now = String(new Date().getFullYear());
+    if (fmt !== "year" && ys === now && ye === now) return shortDay(s) + " – " + shortDay(e);
+    return ys === ye ? shortDay(s) + " – " + shortDay(e) + " " + ye : shortDay(s) + " " + ys + " – " + shortDay(e) + " " + ye;
+  }
+  // For sentences: "October", or "18 Sep – 17 Oct"
+  function pmName(key) { return monthStart() === 1 ? monthName(key) : pmLabel(key, "long"); }
   function shortDate(iso) { var d = new Date(iso); return isNaN(d) ? "" : d.toLocaleDateString("en-GB", { day: "numeric", month: "short" }); }
   function txDate(d) {
     var today = new Date(), dt = new Date(d + "T12:00:00");
@@ -828,7 +880,7 @@ code.secret { word-break: break-all; font-size: 12px; background: var(--bg-faint
       doc.list.forEach(function (t, idx) {
         if (t.x) return; // removed by hand: kept only so re-imports know to skip it
         var w = t.b && acc.spenders ? acc.spenders[t.b] : null;
-        out.push({ d: t.d, a: t.a, m: t.m, k: t.k, c: t.c, o: t.o, h: t.h, w: w === "p1" || w === "p2" ? w : null, idx: idx, doc: doc.id, acc: doc.acc, accName: acc.name, owner: acc.owner || "joint", cat: effCat(t) });
+        out.push({ d: t.d, pm: txMonth(t.d), a: t.a, m: t.m, k: t.k, c: t.c, o: t.o, h: t.h, w: w === "p1" || w === "p2" ? w : null, idx: idx, doc: doc.id, acc: doc.acc, accName: acc.name, owner: acc.owner || "joint", cat: effCat(t) });
       });
     });
     out.sort(function (x, y) { return x.d < y.d ? 1 : x.d > y.d ? -1 : 0; });
@@ -836,7 +888,7 @@ code.secret { word-break: break-all; font-size: 12px; background: var(--bg-faint
   }
   function dirtyTx() { txCache = null; }
   function txMonths() {
-    var set = {}; allTx().forEach(function (t) { set[t.d.slice(0, 7)] = 1; });
+    var set = {}; allTx().forEach(function (t) { set[t.pm] = 1; });
     return Object.keys(set).sort();
   }
   function stats(txs) {
@@ -849,17 +901,18 @@ code.secret { word-break: break-all; font-size: 12px; background: var(--bg-faint
     var out = 0; Object.keys(byCat).forEach(function (k) { out += byCat[k]; });
     return { inc: inc, out: out, net: inc - out, byCat: byCat };
   }
-  function inMonth(txs, m) { return txs.filter(function (t) { return t.d.slice(0, 7) === m; }); }
+  function inMonth(txs, m) { return txs.filter(function (t) { return (t.pm || txMonth(t.d)) === m; }); }
   function currentMonth() {
     var ms = txMonths();
-    if (S.month && (ms.indexOf(S.month) >= 0 || S.month === monthKey())) return S.month;
-    if (ms.indexOf(monthKey()) >= 0) return monthKey();
-    return ms.length ? ms[ms.length - 1] : monthKey();
+    var now = thisMonth();
+    if (S.month && (ms.indexOf(S.month) >= 0 || S.month === now)) return S.month;
+    if (ms.indexOf(now) >= 0) return now;
+    return ms.length ? ms[ms.length - 1] : now;
   }
   function monthSelect(sel) {
-    var ms = txMonths(); if (ms.indexOf(monthKey()) < 0) ms.push(monthKey());
+    var ms = txMonths(); if (ms.indexOf(thisMonth()) < 0) ms.push(thisMonth());
     ms = ms.slice().sort().reverse();
-    return '<select class="btn btn-neutral" data-month aria-label="Month">' + ms.map(function (m) { return '<option value="' + esc(m) + '"' + (m === sel ? " selected" : "") + ">" + esc(monthLabel(m, "long")) + "</option>"; }).join("") + "</select>";
+    return '<select class="btn btn-neutral" data-month aria-label="Month">' + ms.map(function (m) { return '<option value="' + esc(m) + '"' + (m === sel ? " selected" : "") + ">" + esc(pmLabel(m, "long")) + "</option>"; }).join("") + "</select>";
   }
   function upcomingBills() {
     var today = new Date(); today.setHours(0, 0, 0, 0);
@@ -926,7 +979,7 @@ code.secret { word-break: break-all; font-size: 12px; background: var(--bg-faint
     healthTimer = setTimeout(function () {
       if (!db) return;
       var ms = txMonths(); if (!ms.length) return;
-      var m = ms.indexOf(monthKey()) >= 0 ? monthKey() : ms[ms.length - 1], hl = health(m, allTx());
+      var m = ms.indexOf(thisMonth()) >= 0 ? thisMonth() : ms[ms.length - 1], hl = health(m, allTx());
       if (hl.checks.length < 2) return;
       var sc = Math.round(hl.score);
       if (S.healthSaved === sc) return;
@@ -964,11 +1017,12 @@ code.secret { word-break: break-all; font-size: 12px; background: var(--bg-faint
       (txs.length ? monthSelect(m) : "") + (S.canWrite ? '<button class="btn btn-neutral" data-action="addtx">' + icon("plus") + 'Add transaction</button><button class="btn btn-primary" data-action="import">' + icon("upload") + "Import</button>" : ""));
     if (!txs.length) return head + '<div class="stack">' + emptyImport() + needsCard() + wealthDoor() + "</div>";
     // A month still in progress is compared with the same point last month, not the whole of it
-    var soFar = m === monthKey(), day = new Date().getDate(), pm = addMonths(m, -1), prevAll = inMonth(txs, pm);
-    var st = stats(inMonth(txs, m)), prev = stats(soFar ? prevAll.filter(function (t) { return +t.d.slice(8, 10) <= day; }) : prevAll);
+    var soFar = m === thisMonth(), cal = monthStart() === 1, pm = addMonths(m, -1), prevAll = inMonth(txs, pm);
+    var day = soFar ? Math.round((new Date(dayKey(new Date()) + "T12:00:00Z") - new Date(pmStart(m) + "T12:00:00Z")) / 864e5) + 1 : 0, upTo = addDays(pmStart(pm), day - 1);
+    var st = stats(inMonth(txs, m)), prev = stats(soFar ? prevAll.filter(function (t) { return t.d <= upTo; }) : prevAll);
     var change = prevAll.length ? st.net - prev.net : null;
-    var hero = '<div class="hero"><div class="row-between mb-md"><button type="button" class="hero-title" data-go-tx="" data-sp-tab="overview" title="See this month\'s spending">Net cashflow' + (soFar ? " so far" : "") + ", " + esc(monthLabel(m, "long")) + " " + icon("chev") + "</button>" +
-      (change != null ? '<span class="badge" title="' + (soFar ? "Compared with the first " + day + " days of " + esc(monthName(pm)) : "Compared with " + esc(monthName(pm))) + '">' + (change >= 0 ? "↑ " : "↓ ") + gbp(change) + (soFar ? " vs this time in " : " vs ") + esc(monthLabel(pm)) + "</span>" : "") + "</div>" +
+    var hero = '<div class="hero"><div class="row-between mb-md"><button type="button" class="hero-title" data-go-tx="" data-sp-tab="overview" title="See this month\'s spending">Net cashflow' + (soFar ? " so far" : "") + ", " + esc(pmLabel(m, "long")) + " " + icon("chev") + "</button>" +
+      (change != null ? '<span class="badge" title="' + (soFar ? "Compared with the first " + day + " days of " + esc(pmName(pm)) : "Compared with " + esc(pmName(pm))) + '">' + (change >= 0 ? "↑ " : "↓ ") + gbp(change) + (cal ? (soFar ? " vs this time in " : " vs ") + esc(monthLabel(pm)) : soFar ? " vs this time last month" : " vs the month before") + "</span>" : "") + "</div>" +
       '<p class="big num">' + signed(st.net) + '</p><p class="sm mt-xs">Money in ' + gbp(st.inc) + ", money out " + gbp(st.out) + "</p>" + heroSpark(txs, m) + healthBlock(m, txs, true) + "</div>";
     return head + '<div class="grid g2" style="margin-bottom:24px">' + hero + needsCard() + '</div><div class="doors">' + spendDoor(txs, m) + wealthDoor() + "</div>";
   }
@@ -977,7 +1031,7 @@ code.secret { word-break: break-all; font-size: 12px; background: var(--bg-faint
     return '<button type="button" class="tx-row need-row" ' + attrs + '><div class="icon-tile sm' + (warn ? " danger" : "") + '">' + icon(ic) + '</div><div class="main"><p>' + title + '</p><p class="sm muted">' + sub + "</p></div>" + icon("chev") + "</button>";
   }
   function needsCard() {
-    var rows = [], cur = monthKey(), spend = 'data-go-tx="" data-sp-tab="overview"';
+    var rows = [], cur = thisMonth(), spend = 'data-go-tx="" data-sp-tab="overview"';
     // Bills due in the next week
     upcomingBills().filter(function (b) { return b.days <= 7; }).slice(0, 3).forEach(function (b) {
       rows.push(needRow("receipt", esc(b.name) + " · " + gbp(b.amount, 2), b.days < 0 ? "Usually paid by now" : b.days === 0 ? "Due today" : b.days === 1 ? "Due tomorrow" : "Due in " + b.days + " days", spend, b.days <= 0));
@@ -1005,14 +1059,14 @@ code.secret { word-break: break-all; font-size: 12px; background: var(--bg-faint
     }
     // This month's Wealth update
     var items = vals(S.items), left = items.filter(function (i) { return !doneThisMonth(i); }).length;
-    if (items.length && left) rows.push(needRow("chart", esc(monthName(cur)) + " Wealth update", (items.length - left) + " of " + items.length + " done", 'data-open="wealth"'));
+    if (items.length && left) rows.push(needRow("chart", esc(monthName(monthKey())) + " Wealth update", (items.length - left) + " of " + items.length + " done", 'data-open="wealth"'));
     return '<div class="card"><div class="sec-head"><h2>Needs attention</h2>' + (rows.length ? '<span class="badge warning">' + rows.length + "</span>" : "") + "</div>" +
       (rows.length ? '<div class="rows">' + rows.join("") + "</div>" : '<div class="all-clear">' + icon("checkcircle") + "<p>Nothing needs you right now.</p></div>") + "</div>";
   }
   // The two doors: this month's spending, and net worth with its change since the last recorded month
   function spendDoor(txs, m) {
     var st = stats(inMonth(txs, m));
-    return '<button type="button" class="card door" data-go-tx="" data-sp-tab="overview"><div class="row-between"><p class="muted">Spending</p>' + icon("chev") + '</div><p class="big mt-xs">' + gbp(st.out) + '</p><p class="sm faint mt-xs">Spent ' + (m === monthKey() ? "so far in " + esc(monthName(m)) : "in " + esc(monthLabel(m, "long"))) + "</p></button>";
+    return '<button type="button" class="card door" data-go-tx="" data-sp-tab="overview"><div class="row-between"><p class="muted">Spending</p>' + icon("chev") + '</div><p class="big mt-xs">' + gbp(st.out) + '</p><p class="sm faint mt-xs">Spent ' + (m === thisMonth() ? (monthStart() === 1 ? "so far in " + esc(monthName(m)) : "so far this month") : "in " + esc(pmLabel(m, "long"))) + "</p></button>";
   }
   function wealthDoor() {
     var items = vals(S.items), t = wTotals(items);
@@ -1040,7 +1094,7 @@ code.secret { word-break: break-all; font-size: 12px; background: var(--bg-faint
   }
 
   function cashflowCard(txs, sel) {
-    var ms = txMonths(), last = ms[ms.length - 1]; if (sel > last) last = sel;
+    var ms = txMonths(), last = ms[ms.length - 1], cal = monthStart() === 1; if (sel > last) last = sel;
     var months = []; for (var i = 8; i >= 0; i--) { var k = addMonths(last, -i); if (k >= ms[0]) months.push(k); }
     var data = months.map(function (k) { var s = stats(inMonth(txs, k)); return { m: k, inc: s.inc, out: s.out }; });
     var VW = 420, VH = 250, PL = 40, PR = 8, PT = 12, PB = 26, pw = VW - PL - PR, ph = VH - PT - PB, base = PT + ph;
@@ -1059,8 +1113,8 @@ code.secret { word-break: break-all; font-size: 12px; background: var(--bg-faint
     if (pts.length > 1) svg += '<path d="' + smoothPath(pts) + '" fill="none" stroke="var(--text-primary)" stroke-width="1.25"/>';
     pts.forEach(function (p, i) { svg += '<circle cx="' + p[0] + '" cy="' + p[1] + '" r="' + (data[i].m === sel ? 4 : 2.5) + '" fill="var(--surface-bg)" stroke="var(--text-primary)" stroke-width="1.25"/>'; });
     data.forEach(function (d, i) {
-      svg += '<text x="' + cx(i) + '" y="' + (base + 18) + '" text-anchor="middle" font-size="11" font-weight="' + (d.m === sel ? 700 : 400) + '" fill="' + (d.m === sel ? "var(--text-primary)" : "var(--text-secondary)") + '">' + esc(monthLabel(d.m).slice(0, 3)) + "</text>";
-      svg += '<rect class="hit" data-pick-month="' + esc(d.m) + '" x="' + (PL + slot * i) + '" y="' + PT + '" width="' + slot + '" height="' + (ph + PB) + '" fill="transparent"><title>' + esc(monthLabel(d.m, "long")) + ": in " + gbp(d.inc) + ", out " + gbp(d.out) + "</title></rect>";
+      svg += '<text x="' + cx(i) + '" y="' + (base + 18) + '" text-anchor="middle" font-size="' + (cal ? 11 : 10) + '" font-weight="' + (d.m === sel ? 700 : 400) + '" fill="' + (d.m === sel ? "var(--text-primary)" : "var(--text-secondary)") + '">' + esc(cal ? monthLabel(d.m).slice(0, 3) : +pmStart(d.m).slice(8) + " " + monthLabel(pmStart(d.m).slice(0, 7)).slice(0, 3)) + "</text>";
+      svg += '<rect class="hit" data-pick-month="' + esc(d.m) + '" x="' + (PL + slot * i) + '" y="' + PT + '" width="' + slot + '" height="' + (ph + PB) + '" fill="transparent"><title>' + esc(pmLabel(d.m, "long")) + ": in " + gbp(d.inc) + ", out " + gbp(d.out) + "</title></rect>";
     });
     svg += "</svg>";
     return '<div class="card chart"><div class="mb-md"><h2>Cashflow</h2><p class="sm muted mt-xs">Money in vs money out. Tap a month to see it.</p></div>' +
@@ -1136,7 +1190,7 @@ code.secret { word-break: break-all; font-size: 12px; background: var(--bg-faint
   // Months to average over: the chosen month and the two before it. A month still in progress is
   // left out (a few days would drag every average down), unless it's the only month there is.
   function avgMonths(m) {
-    var have = txMonths(), back = m === monthKey() ? [1, 2, 3] : [0, 1, 2];
+    var have = txMonths(), back = m === thisMonth() ? [1, 2, 3] : [0, 1, 2];
     var ms = back.map(function (n) { return addMonths(m, -n); }).filter(function (k) { return have.indexOf(k) >= 0; });
     return ms.length ? ms : have.indexOf(m) >= 0 ? [m] : [];
   }
@@ -1229,7 +1283,7 @@ code.secret { word-break: break-all; font-size: 12px; background: var(--bg-faint
         var m = cleanDesc(desc) || desc.slice(0, 60), tx = { d: d, a: gv("dir") === "out" ? -Math.abs(amt) : Math.abs(amt), m: m, k: merchantKey(m), c: gv("cat"), h: hash("manual" + newId()), u: 1 };
         var id = accId + "_" + d.slice(0, 7), ex = S.txdocs[id], list = ex && Array.isArray(ex.list) ? ex.list.slice() : [];
         list.push(tx); list.sort(function (x, y) { return x.d < y.d ? 1 : -1; });
-        saveDoc("tx", id, { acc: accId, month: d.slice(0, 7), list: list }); S.month = d.slice(0, 7);
+        saveDoc("tx", id, { acc: accId, month: d.slice(0, 7), list: list }); S.month = txMonth(d);
       }
     });
   }
@@ -1493,7 +1547,7 @@ code.secret { word-break: break-all; font-size: 12px; background: var(--bg-faint
   // ══ Financial health ═══════════════════════════════════════════════════
   function clamp(v) { return Math.max(0, Math.min(100, v)); }
   function health(m, txs) {
-    var months = avgMonths(m), n = months.length || 1, partial = months.length === 1 && months[0] === monthKey();
+    var months = avgMonths(m), n = months.length || 1, partial = months.length === 1 && months[0] === thisMonth();
     var inc = 0, out = 0, byCat = {};
     months.forEach(function (k) { var s = stats(inMonth(txs, k)); inc += s.inc; out += s.out; Object.keys(s.byCat).forEach(function (c) { byCat[c] = (byCat[c] || 0) + s.byCat[c]; }); });
     inc /= n; out /= n; Object.keys(byCat).forEach(function (c) { byCat[c] /= n; });
@@ -1581,7 +1635,7 @@ code.secret { word-break: break-all; font-size: 12px; background: var(--bg-faint
     if (bKeys.length && mst.out > 0) {
       var overs = bKeys.map(function (k) { return { k: k, over: (mst.byCat[k] || 0) - S.budgets[k] }; }).filter(function (x) { return x.over > 0; }).sort(function (a, b) { return b.over - a.over; });
       checks.push({ key: "budgets", w: 10, label: "Sticking to budgets", value: (bKeys.length - overs.length) + " of " + bKeys.length + " budgets within limit", target: "Every category within its budget", score: overs.length ? (bKeys.length - overs.length) / bKeys.length * 70 : 100,
-        source: "Your own monthly budgets, for " + monthLabel(m, "long") + ".",
+        source: "Your own monthly budgets, for " + pmLabel(m, "long") + ".",
         good: "All " + bKeys.length + " budgets are within their limits this month.",
         step: overs.length ? { icon: CAT[overs[0].k].icon, title: "Rebalance " + CAT[overs[0].k].label.toLowerCase(), detail: "It's " + gbp(overs[0].over) + " over budget this month. Trim spending there, or set a budget that reflects what it really costs." } : null });
     }
@@ -1631,7 +1685,7 @@ code.secret { word-break: break-all; font-size: 12px; background: var(--bg-faint
   // (balances and how up to date each one is). The month and person at the top apply to all three.
   function pageTx() {
     var txs = allTx(), accs = vals(S.accounts), q = S.txq, month = q.month == null ? currentMonth() : q.month, tab = S.spTab;
-    var sub = tab === "accounts" ? "Your bank accounts and cards" : esc(month ? monthLabel(month, "long") : "All months") + (tab === "payments" ? ", newest first" : "");
+    var sub = tab === "accounts" ? "Your bank accounts and cards" : esc(month ? pmLabel(month, "long") : "All months") + (tab === "payments" ? ", newest first" : "");
     var head = pageHead("Spending", sub, (txs.length && tab !== "accounts" ? spMonthPick(month) : "") + personSwitch() +
       (S.canWrite ? '<button class="btn btn-primary" data-action="import">' + icon("upload") + "Import</button>" : ""));
     if (!txs.length && !accs.length) return head + emptyImport();
@@ -1644,19 +1698,19 @@ code.secret { word-break: break-all; font-size: 12px; background: var(--bg-faint
   }
   // The month picker: any month, or "All months"
   function spMonthPick(month) {
-    var ms = txMonths().slice(); if (ms.indexOf(monthKey()) < 0) ms.push(monthKey()); if (month && ms.indexOf(month) < 0) ms.push(month);
+    var ms = txMonths().slice(); if (ms.indexOf(thisMonth()) < 0) ms.push(thisMonth()); if (month && ms.indexOf(month) < 0) ms.push(month);
     ms.sort().reverse();
     return '<select class="btn btn-neutral" data-txq="month" aria-label="Month"><option value=""' + (month ? "" : " selected") + ">All months</option>" +
-      ms.map(function (m) { return '<option value="' + esc(m) + '"' + (month === m ? " selected" : "") + ">" + esc(monthLabel(m, "long")) + "</option>"; }).join("") + "</select>";
+      ms.map(function (m) { return '<option value="' + esc(m) + '"' + (month === m ? " selected" : "") + ">" + esc(pmLabel(m, "long")) + "</option>"; }).join("") + "</select>";
   }
   function sumTile(label, value, cls) { return '<div class="tile"><p class="sm muted">' + esc(label) + '</p><p class="num' + (cls || "") + '">' + value + "</p></div>"; }
   // Has anything been imported for this month yet, for these accounts?
-  function notYetFor(accsOf, m) { var fr = accFresh(); return !!m && accsOf.length > 0 && accsOf.every(function (a) { return !fr[a.id] || fr[a.id].day < m + "-01"; }); }
+  function notYetFor(accsOf, m) { var fr = accFresh(); return !!m && accsOf.length > 0 && accsOf.every(function (a) { return !fr[a.id] || fr[a.id].day < pmStart(m); }); }
 
   function spOverview(txs, month) {
     var list = month ? inMonth(txs, month) : txs, o = S.who, accs = vals(S.accounts);
     var mine = o === "all" ? list : personTx(list, o), st = stats(mine), js = o === "all" ? 0 : jointShare(list, o);
-    var when = month ? (month === monthKey() ? monthName(month) + " so far" : monthLabel(month, "long")) : "all months";
+    var when = month ? (month === thisMonth() ? (monthStart() === 1 ? monthName(month) : "this month") + " so far" : pmLabel(month, "long")) : "all months";
     var html = '<div class="sum-row">' + sumTile("Money in", gbp(st.inc), " pos") + sumTile("Spent", gbp(st.out)) + sumTile("Net", signed(st.net)) + "</div>" +
       '<p class="sm faint mb-lg">' + esc(when.charAt(0).toUpperCase() + when.slice(1)) + ", not counting transfers" + (js >= 0.5 ? ". Spent includes " + gbp(js) + " from joint accounts" : "") + ".</p>";
     if (o === "all") {
@@ -1670,13 +1724,13 @@ code.secret { word-break: break-all; font-size: 12px; background: var(--bg-faint
           '<button type="button" class="btn btn-subtle" data-who="' + p + '" aria-label="Show ' + esc(p === "joint" ? "joint" : ownerName(p) + "'s") + ' spending">View ' + icon("chev") + "</button></div>" +
           '<div class="sum-row two-up" style="margin-bottom:16px"><div class="tile"><p class="sm muted">Balances</p><p class="num" style="font-weight:600">' + gbpOr(t2.cash) + '</p></div><div class="tile"><p class="sm muted">Spent</p><p class="num" style="font-weight:600">' + gbp(ms.out) + "</p>" + (pj >= 0.5 ? '<p class="sm faint">including ' + gbp(pj) + " from joint</p>" : "") + "</div></div>" +
           (top.length ? '<div class="stack" style="gap:10px">' + top.map(function (k) { return '<div><div class="row-between mb-xs"><span class="sm">' + esc(CAT[k].label) + '</span><span class="sm muted num">' + gbp(ms.byCat[k]) + "</span></div>" + bar(ms.out ? ms.byCat[k] / ms.out * 100 : 0) + "</div>"; }).join("") + "</div>"
-            : '<p class="sm ' + (notYet ? "warn-text" : "muted") + '">' + (notYet ? "Nothing imported for " + esc(monthName(month)) + " yet." : "No spending " + (month ? "this month." : "yet.")) + "</p>") + "</div>";
+            : '<p class="sm ' + (notYet ? "warn-text" : "muted") + '">' + (notYet ? "Nothing imported for " + esc(pmName(month)) + " yet." : "No spending " + (month ? "this month." : "yet.")) + "</p>") + "</div>";
       }).join("") + "</div>";
     } else if (notYetFor(accs.filter(function (a) { return (a.owner || "joint") === o; }), month)) {
-      html += '<p class="sm warn-text mb-lg">Nothing imported for ' + esc(monthName(month)) + " yet for " + esc(o === "joint" ? "joint accounts" : ownerName(o) + "'s accounts") + ".</p>";
+      html += '<p class="sm warn-text mb-lg">Nothing imported for ' + esc(pmName(month)) + " yet for " + esc(o === "joint" ? "joint accounts" : ownerName(o) + "'s accounts") + ".</p>";
     }
     // The chart of money in and out by month, and (for everyone) bills coming up
-    var chart = cashflowCard(o === "all" ? txs : personTx(txs, o), month || monthKey());
+    var chart = cashflowCard(o === "all" ? txs : personTx(txs, o), month || thisMonth());
     html += o === "all" ? '<div class="grid g2" style="margin-bottom:24px">' + chart + billsCard() + "</div>" : '<div style="margin-bottom:24px">' + chart + "</div>";
     html += spCategories(st, o, month);
     return html;
@@ -1697,13 +1751,13 @@ code.secret { word-break: break-all; font-size: 12px; background: var(--bg-faint
     var edit = o === "all" && S.canWrite ? '<button type="button" class="btn btn-subtle" data-action="budgets">' + (budgetKeys().length ? "Edit budgets" : "Set budgets") + " " + icon("chev") + "</button>" : "";
     return '<div class="card"><div class="sec-head"><h2>Spending by category</h2>' + edit + "</div>" +
       (o === "all" && month && !budgetKeys().length && S.canWrite ? '<p class="sm muted mb-md">Set a monthly budget for the categories that matter, and they\'ll show here against what\'s spent.</p>' : "") +
-      (rows.length ? '<div class="stack" style="gap:6px">' + rows.join("") + "</div>" : '<p class="muted">No spending ' + (month ? "in " + esc(monthLabel(month, "long")) : "yet") + ".</p>") + "</div>";
+      (rows.length ? '<div class="stack" style="gap:6px">' + rows.join("") + "</div>" : '<p class="muted">No spending ' + (month ? "in " + esc(pmLabel(month, "long")) : "yet") + ".</p>") + "</div>";
   }
 
   function spPayments(txs, month) {
     var q = S.txq, needle = q.q.trim().toLowerCase();
     var list = txs.filter(function (t) {
-      if (month && t.d.slice(0, 7) !== month) return false;
+      if (month && t.pm !== month) return false;
       // A person's view includes their own accounts, plus joint payments they made
       if (S.who !== "all" && !personTx([t], S.who).length) return false;
       if (q.acc !== "all" && t.acc !== q.acc) return false;
@@ -1719,7 +1773,7 @@ code.secret { word-break: break-all; font-size: 12px; background: var(--bg-faint
         '<select data-txq="acc" aria-label="Account"><option value="all">All accounts</option>' + vals(S.accounts).map(function (a) { return '<option value="' + esc(a.id) + '"' + (q.acc === a.id ? " selected" : "") + ">" + esc(a.name) + "</option>"; }).join("") + "</select>" +
         '<select data-txq="cat" aria-label="Category"><option value="all">All categories</option>' + CATS.map(function (c) { return '<option value="' + c[0] + '"' + (q.cat === c[0] ? " selected" : "") + ">" + esc(c[1]) + "</option>"; }).join("") + "</select>" + clear + "</div>" : "");
     // One line of totals for what's shown, saying which period it covers
-    var mText = month ? (month.slice(0, 4) === monthKey().slice(0, 4) ? monthName(month) : monthLabel(month, "long")) : "";
+    var mText = month ? (monthStart() > 1 ? pmLabel(month, "long") : month.slice(0, 4) === monthKey().slice(0, 4) ? monthName(month) : monthLabel(month, "long")) : "";
     html += '<p class="sm muted mb-md">' + list.length.toLocaleString("en-GB") + " payment" + (list.length === 1 ? "" : "s") + (month ? " in " + esc(mText) : ", all months") +
       ': <span class="num">' + gbp(st.out) + '</span> out, <span class="num pos">' + gbp(st.inc) + "</span> in</p>";
     var shown = list.slice(0, 300);
@@ -2195,7 +2249,7 @@ code.secret { word-break: break-all; font-size: 12px; background: var(--bg-faint
             // A new month means a different monthly list
             swap(doc.id, t.h, null);
             var id2 = doc.acc + "_" + d.slice(0, 7), ex = S.txdocs[id2], l2 = ex && Array.isArray(ex.list) ? ex.list.slice() : [];
-            l2.push(nt); l2.sort(function (x, y) { return x.d < y.d ? 1 : -1; }); saveDoc("tx", id2, { acc: doc.acc, month: d.slice(0, 7), list: l2 }); S.month = d.slice(0, 7);
+            l2.push(nt); l2.sort(function (x, y) { return x.d < y.d ? 1 : -1; }); saveDoc("tx", id2, { acc: doc.acc, month: d.slice(0, 7), list: l2 }); S.month = txMonth(d);
           }
           return dirtyTx();
         }
@@ -2226,6 +2280,8 @@ code.secret { word-break: break-all; font-size: 12px; background: var(--bg-faint
         { name: "household", label: "Household name", value: S.household.household },
         { name: "p1", label: "First person", value: S.household.p1 },
         { name: "p2", label: "Second person", value: S.household.p2 },
+        { name: "monthStart", label: "Your money month starts on", type: "select", value: monthStart(), options: [[1, "The 1st (calendar months)"]].concat(Array.apply(null, Array(30)).map(function (x, i) { return [i + 2, "The " + ordinal(i + 2) + (i + 2 > 28 ? " (or the month's last day)" : "")]; })),
+          hint: "Pick your payday to see Spending, budgets and the health score from one payday to the next. If it falls on a weekend or bank holiday, the month starts on the working day before, as pay usually does. Wealth stays on calendar months." },
         { type: "html", html: '<div class="tile"><h3 class="mb-xs">What gets saved</h3><p class="sm muted">' + PRIVACY_NOTE + '</p></div>' +
           (S.billsIgnore.length ? '<div class="tile"><h3 class="mb-xs">Hidden bills</h3><p class="sm muted mb-md">Payments you marked as not a bill. Show one again to put it back in Upcoming bills.</p><div class="stack" style="gap:8px">' +
             S.billsIgnore.map(function (k) { return '<div class="row-between" style="gap:12px"><span>' + esc(billName(k)) + '</span>' + (S.canWrite ? '<button type="button" class="btn btn-subtle" data-bill-unhide="' + esc(k) + '">Show again</button>' : "") + "</div>"; }).join("") + "</div></div>" : "") +
@@ -2241,7 +2297,8 @@ code.secret { word-break: break-all; font-size: 12px; background: var(--bg-faint
       saveLabel: "Save",
       onSave: function () {
         if (!S.canWrite) return;
-        var h = { household: gv("household").trim() || "Our household", p1: gv("p1").trim() || "Person 1", p2: gv("p2").trim() || "Person 2" };
+        var ms = Math.round(Number(gv("monthStart"))), h = { household: gv("household").trim() || "Our household", p1: gv("p1").trim() || "Person 1", p2: gv("p2").trim() || "Person 2", monthStart: ms >= 2 && ms <= 31 ? ms : 1 };
+        if (h.monthStart !== monthStart()) { S.household = h; dirtyTx(); S.month = thisMonth(); S.txq.month = null; }
         S.household = h; saveMeta("household", h);
       }
     });
@@ -2527,17 +2584,18 @@ code.secret { word-break: break-all; font-size: 12px; background: var(--bg-faint
     if (!pdfLib) pdfLib = import(new URL("vendor/pdfjs/pdf.min.js", document.baseURI).href).then(function (lib) {
       lib.GlobalWorkerOptions.workerSrc = new URL("vendor/pdfjs/pdf.worker.min.js", document.baseURI).href;
       return lib;
-    }, function () { pdfLib = null; throw { code: "reader" }; });
+    }, function (err) { pdfLib = null; throw { code: "reader", ref: pdfRef("load", err) }; });
     return pdfLib;
   }
   // Each page's text as {x, y, w, h, s}, measured from the top left, in reading order
   function pdfPages(lib, buf) {
-    var task = lib.getDocument({ data: buf, isEvalSupported: false, disableFontFace: true, useSystemFonts: false, enableXfa: false, stopAtErrors: false });
+    var step = "open", task = lib.getDocument({ data: buf, isEvalSupported: false, disableFontFace: true, useSystemFonts: false, enableXfa: false, stopAtErrors: false });
     function done() { try { task.destroy(); } catch (e) { /* already gone */ } }
     return task.promise.then(function (doc) {
       var pages = [], n = Math.min(doc.numPages, 60), p = 0;
       function next() {
         if (++p > n) return pages;
+        step = "page " + p + " of " + doc.numPages;
         return doc.getPage(p).then(function (page) {
           var vp = page.getViewport({ scale: 1 });
           return page.getTextContent().then(function (tc) {
@@ -2554,7 +2612,8 @@ code.secret { word-break: break-all; font-size: 12px; background: var(--bg-faint
       }
       return next();
     }).then(function (pages) { done(); return pages; }, function (err) {
-      done(); throw { code: err && err.name === "PasswordException" ? "password" : "unreadable" };
+      done(); var name = err && err.name;
+      throw { code: name === "PasswordException" ? "password" : name === "InvalidPDFException" && step === "open" ? "damaged" : step === "open" ? "open" : "page", ref: pdfRef(step, err) };
     });
   }
   var PDF_AMT = /^([\-−–]\s?)?\(?\s?([\-−–]\s?)?£?\s?((?:\d{1,3}(?:,\d{3})+|\d+)\.\d{2})\s?\)?\s?(cr|dr|od|[\-−–])?$/i, PDF_MARK = /^(cr|dr|od)$/i;
@@ -2828,11 +2887,26 @@ code.secret { word-break: break-all; font-size: 12px; background: var(--bg-faint
     var u = t.replace(/^(card transaction|card payment|contactless payment|contactless|debit card payment|online transaction|online payment|online banking|mobile payment|faster payment|bill payment|direct debit|standing order|automated credit)\b[\s:\-]*/i, "");
     return /[a-z]/i.test(u) ? u : t;
   }
+  // A short note of what went wrong, for fixing it: the step, the kind of error and where in the
+  // code. Error messages come from the code, not the statement, and long numbers are blanked anyway.
+  function pdfRef(step, err) {
+    var name = String((err && err.name) || "Error").replace(/[^\w]/g, "").slice(0, 30);
+    var msg = String((err && err.message) || "").replace(/\d{3,}/g, "#").replace(/[^\w .,:;'()#\/-]/g, "").slice(0, 90);
+    var at = String((err && err.stack) || "").split("\n").map(function (l) { var m = l.match(/([\w$.]*)[@ (]+\S*\/((?:app|pdf\.min|pdf\.worker\.min)\.js):(\d+)/); return m ? (m[1] ? m[1] + " " : "") + m[2] + ":" + m[3] : ""; }).filter(Boolean)[0] || "";
+    return step + " · " + name + (msg ? ": " + msg : "") + (at ? " · " + at : "");
+  }
   var impSeq = 0;
   function readPdf(file, seq) {
     iBody.innerHTML = '<p class="sm muted" role="status">Reading ' + esc(file.name) + "…</p>";
     var buf;
-    file.arrayBuffer().then(function (b) { buf = b; return loadPdfLib(); })
+    file.arrayBuffer().then(function (b) {
+      buf = b;
+      if (!b || !b.byteLength) throw { code: "file", ref: "file · empty" };
+      var head = new Uint8Array(b, 0, Math.min(b.byteLength, 1024)), s = "";
+      for (var i = 0; i < head.length; i++) s += String.fromCharCode(head[i]);
+      if (s.indexOf("%PDF") < 0) throw { code: "notpdf", ref: "file · not a PDF inside" };
+      return loadPdfLib();
+    }, function (err) { throw { code: "file", ref: pdfRef("file", err) }; })
       .then(function (lib) { return pdfPages(lib, buf); })
       .then(function (pages) {
         if (seq !== impSeq || !iDlg.open) return;
@@ -2843,19 +2917,26 @@ code.secret { word-break: break-all; font-size: 12px; background: var(--bg-faint
       })
       .catch(function (err) {
         if (seq !== impSeq || !iDlg.open) return;
-        var code = err && err.code, msg = {
+        var code = err && err.code, ref = err && err.ref;
+        if (!code) { code = "layout"; ref = pdfRef("layout", err); console.warn("PDF import failed", err); }
+        impError({
           demo: "In the real app, PDF statements are read right here on the device. This demo leaves that part out, so try a CSV instead.",
           reader: "The PDF reader couldn't load. Check you're online, then try again.",
           password: "This PDF has a password, so it can't be read. Save a copy without the password and try again.",
           image: "This PDF is a picture of a statement, so there's no text to read. Download it from your bank's website instead, or use a CSV.",
-          notable: "No list of payments was found in this PDF. It works with statements that have a table of dates and amounts. If your bank offers a CSV, try that instead."
-        }[code] || "That PDF couldn't be opened. It might be damaged, so try downloading it again.";
-        if (!code) console.warn("PDF import failed", err);
-        impError(msg);
+          notable: "No list of payments was found in this PDF. It works with statements that have a table of dates and amounts. If your bank offers a CSV, try that instead.",
+          file: "Your phone couldn't hand that file over. If it's saved in iCloud or another app, open it in the Files app first so it's on your phone, then try again.",
+          notpdf: "That file isn't a PDF inside, even though its name ends in .pdf. Try downloading the statement again.",
+          damaged: "That PDF looks damaged, so it can't be read. Try downloading it again.",
+          open: "The PDF reader couldn't open this file.",
+          page: "The PDF reader stopped partway through this file.",
+          layout: "Something went wrong while laying out this statement. That's a fault in the app, not your file."
+        }[code], code === "password" || code === "image" || code === "notable" ? "" : ref);
       });
   }
-  function impError(msg) {
-    iBody.innerHTML = '<p class="err" style="font-size:14px" role="alert">' + esc(msg) + "</p>";
+  function impError(msg, ref) {
+    iBody.innerHTML = '<p class="err" style="font-size:14px" role="alert">' + esc(msg) + "</p>" +
+      (ref ? '<p class="sm muted mt-xs">If it happens again, tell Claude this note. It has nothing from your statement in it: <code class="secret">' + esc(ref) + "</code></p>" : "");
     iFoot.innerHTML = '<div class="right"><button type="button" class="btn btn-neutral" data-close>Cancel</button><button type="button" class="btn btn-primary" data-imp-again>Choose another file</button></div>';
   }
   function pdfNote(p) {
@@ -2953,7 +3034,7 @@ code.secret { word-break: break-all; font-size: 12px; background: var(--bg-faint
     }
     acc.lastImport = new Date().toISOString();
     saveDoc("accounts", accId, acc);
-    var months = Object.keys(byMonth).sort(); S.month = months[months.length - 1];
+    S.month = txMonth(rows.reduce(function (m, r) { return r.d > m ? r.d : m; }, ""));
     iBody.innerHTML = '<div class="ok-box"><p style="font-weight:600">Imported ' + added + " transaction" + (added === 1 ? "" : "s") + " into " + esc(acc.name) + ".</p>" + (skipped ? '<p class="sm mt-xs">' + skipped + " were already here, so they were skipped.</p>" : "") + "</div>" +
       '<p class="sm muted">Spot something in the wrong category? Tap it in Spending to change it, and choose whether to apply that to everything from the same place.</p>';
     IMP.undo = added ? undo : null;
@@ -3155,8 +3236,8 @@ code.secret { word-break: break-all; font-size: 12px; background: var(--bg-faint
     }
     var ms = txMonths().slice(-6);
     if (ms.length) {
-      L.push("\nCASHFLOW BY MONTH (excluding transfers between own accounts):");
-      ms.forEach(function (k) { var s = stats(inMonth(txs, k)); L.push("- " + monthLabel(k, "year") + (k === monthKey() ? " (so far, " + new Date().getDate() + " days in)" : "") + ": in " + gbp(s.inc) + ", out " + gbp(s.out) + ", net " + signed(s.net)); });
+      L.push("\nCASHFLOW BY MONTH (excluding transfers between own accounts)" + (monthStart() > 1 ? ". Months here run from payday (the " + ordinal(monthStart()) + ", or the working day before) to the day before the next payday" : "") + ":");
+      ms.forEach(function (k) { var s = stats(inMonth(txs, k)); L.push("- " + pmLabel(k, "year") + (k === thisMonth() ? " (so far, " + (Math.round((new Date(dayKey(new Date()) + "T12:00:00Z") - new Date(pmStart(k) + "T12:00:00Z")) / 864e5) + 1) + " days in)" : "") + ": in " + gbp(s.inc) + ", out " + gbp(s.out) + ", net " + signed(s.net)); });
       var avg = catAverages(txs, m), cats = Object.keys(avg).filter(function (k) { return avg[k] > 0; }).sort(function (a, b) { return avg[b] - avg[a]; });
       L.push("\nAVERAGE MONTHLY SPENDING BY CATEGORY (last " + avgMonths(m).length + " full months):");
       cats.forEach(function (k) { L.push("- " + CAT[k].label + ": " + gbp(avg[k]) + (S.budgets[k] ? " (budget " + gbp(S.budgets[k]) + ")" : "")); });
